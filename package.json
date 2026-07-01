@@ -1,0 +1,20 @@
+{
+  "name": "workflo",
+  "private": true,
+  "version": "0.0.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.6.3"
+  }
+}

@@ -1,0 +1,146 @@
+// Workflo — Prisma schema
+// Translated from docs/architecture.md §3 (Data Model). Do NOT run migrations
+// here yet — no database is provisioned during scaffolding.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String            @id @default(cuid())
+  email        String            @unique
+  name         String
+  avatarUrl    String?
+  passwordHash String? // null when OAuth-only
+  createdAt    DateTime          @default(now())
+  memberships  WorkspaceMember[]
+  assigned     Issue[]           @relation("assignee")
+  reported     Issue[]           @relation("reporter")
+  comments     Comment[]
+}
+
+model Workspace {
+  id        String            @id @default(cuid())
+  name      String
+  slug      String            @unique
+  createdAt DateTime          @default(now())
+  members   WorkspaceMember[]
+  projects  Project[]
+}
+
+enum Role {
+  OWNER
+  MEMBER
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+  user        User      @relation(fields: [userId], references: [id])
+  userId      String
+  role        Role      @default(MEMBER)
+
+  @@unique([workspaceId, userId])
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+  key         String // e.g. "WF" -> issues WF-123
+  name        String
+  createdAt   DateTime  @default(now())
+  issues      Issue[]
+  labels      Label[]
+  counter     Int       @default(0) // monotonic per-project issue number
+
+  @@unique([workspaceId, key])
+}
+
+enum IssueType {
+  TASK
+  BUG
+  EPIC
+}
+
+enum IssueStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Issue {
+  id           String      @id @default(cuid())
+  project      Project     @relation(fields: [projectId], references: [id])
+  projectId    String
+  number       Int // human key = project.key + "-" + number
+  title        String
+  description  String? // rich text (JSON) later; markdown for MVP
+  type         IssueType   @default(TASK)
+  status       IssueStatus @default(TODO)
+  priority     Priority    @default(MEDIUM)
+  assignee     User?       @relation("assignee", fields: [assigneeId], references: [id])
+  assigneeId   String?
+  reporter     User        @relation("reporter", fields: [reporterId], references: [id])
+  reporterId   String
+  parent       Issue?      @relation("epic", fields: [parentId], references: [id])
+  parentId     String?
+  children     Issue[]     @relation("epic")
+  labels       Label[]     @relation("IssueLabels")
+  rank         String // LexoRank-style string for board ordering
+  dueDate      DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  comments     Comment[]
+  searchVector Unsupported("tsvector")? // Postgres FTS
+
+  @@unique([projectId, number])
+  @@index([projectId, status, rank])
+}
+
+model Label {
+  id        String  @id @default(cuid())
+  project   Project @relation(fields: [projectId], references: [id])
+  projectId String
+  name      String
+  color     String
+  issues    Issue[] @relation("IssueLabels")
+
+  @@unique([projectId, name])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  issue     Issue    @relation(fields: [issueId], references: [id])
+  issueId   String
+  author    User     @relation(fields: [authorId], references: [id])
+  authorId  String
+  body      String
+  mentions  String[] // userIds mentioned -> drives notifications
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String // MENTION, ASSIGNED, STATUS_CHANGE...
+  payload   Json
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}

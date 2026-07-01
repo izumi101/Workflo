@@ -42,11 +42,11 @@ The user requires specific models for specific work. Follow this strictly.
 
 | Work type | Model | How |
 |-----------|-------|-----|
-| **Planning, architecture, design decisions, ADRs, reviews, breaking down work** | **Opus 4.8** (`claude-opus-4-8`), or **Fable 5** (`claude-fable-5`) when access is restored | Do it directly in the main session (which the user keeps on Opus). |
+| **Planning, architecture, design decisions, ADRs, reviews, breaking down work** | **Fable 5** (`claude-fable-5`) by default; **Opus 4.8** (`claude-opus-4-8`) as fallback when Fable is unavailable | Do it in the main session. |
 | **Writing/refactoring code ("dirty work")** | **Sonnet 5** (`claude-sonnet-5`) | Dispatch via the `Agent` tool with `model: "sonnet"`. Do not write feature code directly on Opus. |
 | **Writing/running tests** | **Sonnet 5** (`claude-sonnet-5`) | Same — dispatch to a Sonnet agent. |
 
-Rule of thumb: **Opus thinks, Sonnet types.** When it's time to implement a planned unit, spin a Sonnet subagent with a tight, self-contained brief (the plan is already done on Opus).
+Rule of thumb: **Fable/Opus think, Sonnet types.** When it's time to implement a planned unit, spin a Sonnet subagent with a tight, self-contained brief (the plan is already done on the planning model).
 
 ---
 
@@ -109,5 +109,8 @@ _(Ideas that are out of current scope — do not build without approval.)_
 - **2026-07-01 — [PLANNING]** Locked stack (React + NestJS + Postgres + Prisma + Redis), MVP scope, and post-MVP roadmap with user. Saved to memory.
 - **2026-07-01 — [PLANNING]** Established model routing rule: Opus 4.8/Fable for planning, Sonnet 5 for code & tests.
 - **2026-07-01 — [ARCHITECTURE]** Wrote full architecture: `CLAUDE.md`, `docs/architecture.md`, ADR-0001..0006, data model sketch, monorepo layout. Used `architecture-designer` skill. No implementation code yet (deferred to Sonnet).
+- **2026-07-01 — [PLANNING]** Model routing clarified by user: **Fable 5 is the default planner, Opus 4.8 is fallback** when Fable is unavailable. Updated §3 + memory. Decided NOT to run `ln-100-documents-pipeline` now (overlaps/would overwrite these docs; revisit at beta with a tracker).
+- **2026-07-01 — [ARCHITECTURE]** Presented container architecture diagram to user for review before scaffolding. Awaiting go-ahead to scaffold.
+- **2026-07-01 — [SCAFFOLD]** Scaffolded pnpm+turbo monorepo: packages/shared (zod schemas), apps/api (NestJS + Prisma schema + /api/v1/health), apps/web (Vite+React+TanStack Query, health round-trip). Verified: pnpm install, shared build/typecheck, `prisma validate`, api build, web build, root `pnpm build`/`pnpm typecheck` via turbo, and a live boot of the API (`PORT=3099`) returning 200 from `GET /api/v1/health` with no DB/Redis running.
 
-_Next up: scaffold monorepo skeleton (apps/web, apps/api, packages/shared) — implement via Sonnet 5._
+_Next up: implement the Auth module (email/password + Google OAuth, JWT access/refresh) per ADR-0005 — implement via Sonnet 5, pending user approval._
