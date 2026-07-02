@@ -2,11 +2,13 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } f
 import {
   createIssueSchema,
   issueListQuerySchema,
+  moveIssueSchema,
   updateIssueSchema,
   type AuthUser,
   type CreateIssue,
   type Issue,
   type IssueListQuery,
+  type MoveIssue,
   type UpdateIssue,
 } from "@workflo/shared";
 import { IssuesService, type IssueListResult } from "./issues.service.js";
@@ -57,6 +59,16 @@ export class IssuesController {
     @Body(new ZodValidationPipe(updateIssueSchema)) body: UpdateIssue,
   ): Promise<Issue> {
     return this.issuesService.update(key, body);
+  }
+
+  @Post("issues/:key/move")
+  @UseGuards(WorkspaceMemberGuard)
+  @ResolveWorkspaceFrom("issue:key")
+  async move(
+    @Param("key") key: string,
+    @Body(new ZodValidationPipe(moveIssueSchema)) body: MoveIssue,
+  ): Promise<Issue> {
+    return this.issuesService.move(key, body);
   }
 
   @Delete("issues/:key")

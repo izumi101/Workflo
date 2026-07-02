@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import type { CreateIssue, Issue, IssueListQuery, UpdateIssue } from "@workflo/shared";
+import { rankBetween, type CreateIssue, type Issue, type IssueListQuery, type MoveIssue, type UpdateIssue } from "@workflo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
-import { nextRank } from "../common/rank.js";
 import { parseIssueKey } from "../common/issue-key.js";
 
 type IssueRow = {
@@ -89,7 +88,7 @@ export class IssuesService {
           reporterId,
           parentId: input.parentId ?? null,
           dueDate: input.dueDate ?? null,
-          rank: nextRank(lastInStatus?.rank),
+          rank: rankBetween(lastInStatus?.rank ?? null, null),
           labels: input.labelIds ? { connect: input.labelIds.map((id) => ({ id })) } : undefined,
         },
         include: ISSUE_INCLUDE,
@@ -167,6 +166,63 @@ export class IssuesService {
     });
 
     return toIssue(issue);
+  }
+
+  /**
+   * Server-authoritative board reposition: moves the issue identified by
+   * `key` to `input.status`, placed between the issues named by
+   * `input.afterIssueId` (comes right after) and `input.beforeIssueId`
+   * (comes right before). Both are optional — omitting both places the
+   * issue at the end of the target column. The neighbors are re-loaded from
+   * the DB (never trust client-supplied ranks) and must belong to the SAME
+   * project as the moved issue and to the target `status` column, otherwise
+   * this 400s. Status + rank are written in a single update.
+   *
+   * Rebalance hook: if `rankBetween` keys keep growing for a hot column,
+   * a periodic job could re-derive short, evenly-spaced ranks scoped to
+   * `[projectId, status]` right here — no change needed to this method's
+   * external contract (see rankBetween's doc comment in packages/shared).
+   */
+  async move(key: string, input: MoveIssue): Promise<Issue> {
+    const existing = await this.findRowByKey(key);
+
+    const [beforeIssue, afterIssue] = await Promise.all([
+      input.beforeIssueId ? this.findNeighbor(input.beforeIssueId) : Promise.resolve(null),
+      input.afterIssueId ? this.findNeighbor(input.afterIssueId) : Promise.resolve(null),
+    ]);
+
+    for (const neighbor of [beforeIssue, afterIssue]) {
+      if (!neighbor) continue;
+      if (neighbor.projectId !== existing.projectId) {
+        throw new BadRequestException("Neighbor issue must belong to the same project");
+      }
+      if (neighbor.status !== input.status) {
+        throw new BadRequestException("Neighbor issue must belong to the target status column");
+      }
+    }
+
+    const rank = rankBetween(afterIssue?.rank ?? null, beforeIssue?.rank ?? null);
+
+    const issue = await this.prisma.issue.update({
+      where: { id: existing.id },
+      data: { status: input.status, rank },
+      include: ISSUE_INCLUDE,
+    });
+
+    return toIssue(issue);
+  }
+
+  private async findNeighbor(
+    id: string,
+  ): Promise<{ id: string; projectId: string; status: "TODO" | "IN_PROGRESS" | "DONE"; rank: string }> {
+    const neighbor = await this.prisma.issue.findUnique({
+      where: { id },
+      select: { id: true, projectId: true, status: true, rank: true },
+    });
+    if (!neighbor) {
+      throw new BadRequestException("Neighbor issue not found");
+    }
+    return neighbor;
   }
 
   async remove(key: string): Promise<void> {

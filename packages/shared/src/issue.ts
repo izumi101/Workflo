@@ -87,6 +87,21 @@ export type UpdateIssue = z.infer<typeof updateIssueSchema>;
  * title/description — a placeholder until dedicated Postgres FTS search
  * (ADR-0006) lands; do not read this as a full-text search contract.
  */
+/**
+ * Body for `POST /issues/:key/move` — server-authoritative board reposition.
+ * `beforeIssueId`/`afterIssueId` name the issue this one should land BEFORE
+ * and AFTER respectively (both nullable/omittable — omit both to place at
+ * the end of `status`). The server loads those neighbors, asserts they
+ * belong to the same project + target status, and computes the new rank
+ * itself via `rankBetween` — the client never sends a rank directly.
+ */
+export const moveIssueSchema = z.object({
+  status: issueStatusSchema,
+  beforeIssueId: z.string().cuid().nullable().optional(),
+  afterIssueId: z.string().cuid().nullable().optional(),
+});
+export type MoveIssue = z.infer<typeof moveIssueSchema>;
+
 export const issueListQuerySchema = z.object({
   status: issueStatusSchema.optional(),
   assigneeId: z.string().cuid().optional(),
