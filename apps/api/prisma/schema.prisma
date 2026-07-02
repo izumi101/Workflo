@@ -12,16 +12,17 @@ datasource db {
 }
 
 model User {
-  id           String            @id @default(cuid())
-  email        String            @unique
-  name         String
-  avatarUrl    String?
-  passwordHash String? // null when OAuth-only
-  createdAt    DateTime          @default(now())
-  memberships  WorkspaceMember[]
-  assigned     Issue[]           @relation("assignee")
-  reported     Issue[]           @relation("reporter")
-  comments     Comment[]
+  id            String            @id @default(cuid())
+  email         String            @unique
+  name          String
+  avatarUrl     String?
+  passwordHash  String? // null when OAuth-only
+  createdAt     DateTime          @default(now())
+  memberships   WorkspaceMember[]
+  assigned      Issue[]           @relation("assignee")
+  reported      Issue[]           @relation("reporter")
+  comments      Comment[]
+  refreshTokens RefreshToken[]
 }
 
 model Workspace {
@@ -83,27 +84,27 @@ enum Priority {
 }
 
 model Issue {
-  id           String      @id @default(cuid())
-  project      Project     @relation(fields: [projectId], references: [id])
+  id           String                   @id @default(cuid())
+  project      Project                  @relation(fields: [projectId], references: [id])
   projectId    String
   number       Int // human key = project.key + "-" + number
   title        String
   description  String? // rich text (JSON) later; markdown for MVP
-  type         IssueType   @default(TASK)
-  status       IssueStatus @default(TODO)
-  priority     Priority    @default(MEDIUM)
-  assignee     User?       @relation("assignee", fields: [assigneeId], references: [id])
+  type         IssueType                @default(TASK)
+  status       IssueStatus              @default(TODO)
+  priority     Priority                 @default(MEDIUM)
+  assignee     User?                    @relation("assignee", fields: [assigneeId], references: [id])
   assigneeId   String?
-  reporter     User        @relation("reporter", fields: [reporterId], references: [id])
+  reporter     User                     @relation("reporter", fields: [reporterId], references: [id])
   reporterId   String
-  parent       Issue?      @relation("epic", fields: [parentId], references: [id])
+  parent       Issue?                   @relation("epic", fields: [parentId], references: [id])
   parentId     String?
-  children     Issue[]     @relation("epic")
-  labels       Label[]     @relation("IssueLabels")
+  children     Issue[]                  @relation("epic")
+  labels       Label[]                  @relation("IssueLabels")
   rank         String // LexoRank-style string for board ordering
   dueDate      DateTime?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
   comments     Comment[]
   searchVector Unsupported("tsvector")? // Postgres FTS
 
@@ -143,4 +144,22 @@ model Notification {
   createdAt DateTime  @default(now())
 
   @@index([userId, readAt])
+}
+
+// Opaque, rotated refresh tokens (ADR-0005). The token value itself is never
+// stored — only a fast cryptographic hash (sha256) for lookup. `family`
+// links a token to all of its rotated descendants so that reuse of a
+// revoked token can invalidate the whole chain (theft detection).
+model RefreshToken {
+  id        String    @id @default(cuid())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  tokenHash String    @unique
+  family    String
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@index([userId])
+  @@index([family])
 }

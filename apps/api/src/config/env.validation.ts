@@ -11,13 +11,16 @@ export const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   REDIS_URL: z.string().min(1, "REDIS_URL is required"),
 
-  JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
+  JWT_ACCESS_SECRET: z.string().min(1, "JWT_ACCESS_SECRET is required"),
+  JWT_REFRESH_SECRET: z.string().min(1, "JWT_REFRESH_SECRET is required"),
   JWT_ACCESS_TTL: z.string().default("15m"),
-  JWT_REFRESH_TTL: z.string().default("30d"),
+  JWT_REFRESH_TTL: z.string().default("7d"),
 
   GOOGLE_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
   GOOGLE_CALLBACK_URL: z.string().optional().default(""),
+
+  WEB_ORIGIN: z.string().min(1, "WEB_ORIGIN is required"),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
