@@ -37,7 +37,7 @@ describe("IssuesService", () => {
     assigneeId: null,
     reporterId: "user_1",
     parentId: null,
-    rank: "m",
+    rank: "a0",
     dueDate: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -75,7 +75,7 @@ describe("IssuesService", () => {
 
       // Second create: counter goes 1 -> 2.
       txMock.project.update.mockResolvedValueOnce({ counter: 2 });
-      txMock.issue.findFirst.mockResolvedValueOnce({ rank: "m" });
+      txMock.issue.findFirst.mockResolvedValueOnce({ rank: "a0" });
       txMock.issue.create.mockResolvedValueOnce(baseIssueRow({ number: 2, id: "issue_2" }));
 
       const second = await service.create("proj_1", "user_1", { title: "Issue B" } as any);
@@ -83,17 +83,33 @@ describe("IssuesService", () => {
       expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
     });
 
-    it("appends a rank after the last issue in the TODO column", async () => {
+    it("appends a rank strictly after the last issue in the TODO column via rankBetween", async () => {
       prismaMock.project.findUnique.mockResolvedValue({ workspaceId: "ws_1" });
       txMock.project.update.mockResolvedValueOnce({ counter: 3 });
-      txMock.issue.findFirst.mockResolvedValueOnce({ rank: "m" });
-      txMock.issue.create.mockResolvedValueOnce(baseIssueRow({ number: 3, rank: "mm" }));
+      txMock.issue.findFirst.mockResolvedValueOnce({ rank: "a0" });
+      txMock.issue.create.mockImplementationOnce(({ data }: any) =>
+        Promise.resolve(baseIssueRow({ number: 3, rank: data.rank })),
+      );
 
       await service.create("proj_1", "user_1", { title: "Issue C" } as any);
 
-      expect(txMock.issue.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ rank: "mm" }) }),
+      const createCall = txMock.issue.create.mock.calls[0][0];
+      expect(createCall.data.rank > "a0").toBe(true);
+    });
+
+    it("places the first issue in an empty column at an open-ended rank (no previous rank)", async () => {
+      prismaMock.project.findUnique.mockResolvedValue({ workspaceId: "ws_1" });
+      txMock.project.update.mockResolvedValueOnce({ counter: 1 });
+      txMock.issue.findFirst.mockResolvedValueOnce(null);
+      txMock.issue.create.mockImplementationOnce(({ data }: any) =>
+        Promise.resolve(baseIssueRow({ number: 1, rank: data.rank })),
       );
+
+      await service.create("proj_1", "user_1", { title: "Issue D" } as any);
+
+      const createCall = txMock.issue.create.mock.calls[0][0];
+      expect(typeof createCall.data.rank).toBe("string");
+      expect(createCall.data.rank.length).toBeGreaterThan(0);
     });
   });
 
@@ -230,6 +246,93 @@ describe("IssuesService", () => {
         }),
       );
       expect(result.status).toBe("IN_PROGRESS");
+    });
+  });
+
+  describe("move", () => {
+    it("computes a rank strictly between the after/before neighbors and updates status+rank atomically", async () => {
+      prismaMock.issue.findFirst.mockResolvedValueOnce({ id: "issue_2", projectId: "proj_1" }); // findRowByKey
+      prismaMock.issue.findUnique
+        .mockResolvedValueOnce({ id: "before_1", projectId: "proj_1", status: "TODO", rank: "a2" }) // beforeIssueId
+        .mockResolvedValueOnce({ id: "after_1", projectId: "proj_1", status: "TODO", rank: "a1" }); // afterIssueId
+      prismaMock.issue.update.mockImplementationOnce(({ data }: any) =>
+        Promise.resolve(baseIssueRow({ id: "issue_2", status: data.status, rank: data.rank })),
+      );
+
+      const result = await service.move("WF-2", {
+        status: "TODO",
+        beforeIssueId: "before_1",
+        afterIssueId: "after_1",
+      } as any);
+
+      expect(prismaMock.issue.update).toHaveBeenCalledTimes(1);
+      const updateCall = prismaMock.issue.update.mock.calls[0][0];
+      expect(updateCall.where).toEqual({ id: "issue_2" });
+      expect(updateCall.data.status).toBe("TODO");
+      expect(updateCall.data.rank > "a1").toBe(true);
+      expect(updateCall.data.rank < "a2").toBe(true);
+      expect(result.status).toBe("TODO");
+    });
+
+    it("places the issue at the end of the column when both neighbor ids are omitted", async () => {
+      prismaMock.issue.findFirst.mockResolvedValueOnce({ id: "issue_1", projectId: "proj_1" });
+      prismaMock.issue.update.mockImplementationOnce(({ data }: any) =>
+        Promise.resolve(baseIssueRow({ id: "issue_1", status: data.status, rank: data.rank })),
+      );
+
+      await service.move("WF-1", { status: "DONE" } as any);
+
+      expect(prismaMock.issue.findUnique).not.toHaveBeenCalled();
+      const updateCall = prismaMock.issue.update.mock.calls[0][0];
+      expect(updateCall.data.status).toBe("DONE");
+      expect(typeof updateCall.data.rank).toBe("string");
+    });
+
+    it("rejects a neighbor issue that belongs to a different project (400)", async () => {
+      prismaMock.issue.findFirst.mockResolvedValueOnce({ id: "issue_1", projectId: "proj_1" });
+      prismaMock.issue.findUnique.mockResolvedValueOnce({
+        id: "other_proj_issue",
+        projectId: "proj_OTHER",
+        status: "TODO",
+        rank: "a1",
+      });
+
+      await expect(
+        service.move("WF-1", { status: "TODO", beforeIssueId: "other_proj_issue" } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prismaMock.issue.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects a neighbor issue that isn't in the target status column (400)", async () => {
+      prismaMock.issue.findFirst.mockResolvedValueOnce({ id: "issue_1", projectId: "proj_1" });
+      prismaMock.issue.findUnique.mockResolvedValueOnce({
+        id: "wrong_status_issue",
+        projectId: "proj_1",
+        status: "DONE",
+        rank: "a1",
+      });
+
+      await expect(
+        service.move("WF-1", { status: "TODO", beforeIssueId: "wrong_status_issue" } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prismaMock.issue.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects a neighbor id that doesn't resolve to any issue (400)", async () => {
+      prismaMock.issue.findFirst.mockResolvedValueOnce({ id: "issue_1", projectId: "proj_1" });
+      prismaMock.issue.findUnique.mockResolvedValueOnce(null);
+
+      await expect(
+        service.move("WF-1", { status: "TODO", afterIssueId: "ghost" } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("throws 404 when the moved issue's key doesn't resolve", async () => {
+      prismaMock.issue.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.move("WF-999", { status: "TODO" } as any)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 
