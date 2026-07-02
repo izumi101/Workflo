@@ -38,15 +38,21 @@ Full rationale in [docs/architecture.md](docs/architecture.md) and [docs/adr/](d
 
 ## 3. Model Routing (MANDATORY)
 
-The user requires specific models for specific work. Follow this strictly.
+Route by **task ambiguity + blast radius**, not a fixed "the big model always plans" rule. Goal: don't burn Fable/Opus on easy work — save them for genuinely murky steps, and escalate *up* only when a step earns it.
 
-| Work type | Model | How |
-|-----------|-------|-----|
-| **Planning, architecture, design decisions, ADRs, reviews, breaking down work** | **Fable 5** (`claude-fable-5`) by default; **Opus 4.8** (`claude-opus-4-8`) as fallback when Fable is unavailable | Do it in the main session. |
-| **Writing/refactoring code ("dirty work")** | **Sonnet 5** (`claude-sonnet-5`) | Dispatch via the `Agent` tool with `model: "sonnet"`. Do not write feature code directly on Opus. |
-| **Writing/running tests** | **Sonnet 5** (`claude-sonnet-5`) | Same — dispatch to a Sonnet agent. |
+| Step type | Plan on | Implement on |
+|-----------|---------|--------------|
+| **Trivial / clear** — touches ≤2 modules AND the approach is already specified in the roadmap / an ADR / a spec (e.g. an endpoint per spec, one more component) | Sonnet 5 plans itself | **Sonnet 5** |
+| **Ambiguous / cross-cutting** — touches >2 modules, OR the approach isn't written down yet, OR it adds a new cross-cutting concern | **Opus 4.8** (main session or a planning sub-agent) | **Sonnet 5** |
+| **Genuinely hard planning** — Opus honestly tried and is circling (can't reconcile the constraints) | **Fable 5** — one pass, not iterative | **Sonnet 5** |
 
-Rule of thumb: **Fable/Opus think, Sonnet types.** When it's time to implement a planned unit, spin a Sonnet subagent with a tight, self-contained brief (the plan is already done on the planning model).
+Code + tests are always written by **Sonnet 5** (dispatch via the `Agent` tool with `model: "sonnet"`), never directly on Opus.
+
+**Foundation / architecture review:** default to a **fresh Opus adversarial pass** ("where does this break at scale? what's the weakest assumption?") — cheap, catches ~90%. Escalate a review to **Fable** only when the foundation is genuinely non-standard AND everything else will sit on top of it — one pass, before committing.
+
+**Verification gate (never skipped):** whoever wrote the code, the orchestrator (Opus) verifies with a real run (build / typecheck / tests) before commit. Autonomy scales the *planning depth*, not the right to skip verification — Sonnet-alone has produced false "done" reports and missed a real bug here, so a tight self-contained brief + an Opus check stays mandatory.
+
+Rule of thumb: **spend the expensive model only where the thinking is expensive.**
 
 ---
 
@@ -54,7 +60,7 @@ Rule of thumb: **Fable/Opus think, Sonnet types.** When it's time to implement a
 
 1. **Read the Progress Log (§8) first.** Never re-decide something already decided; never redo done work.
 2. **Log every meaningful step** in §8 with date + what changed + why. This is the "don't forget / don't mess up" contract.
-3. **Plan on Opus, implement on Sonnet** (see §3).
+3. **Route models by task ambiguity / blast radius, not a fixed default** (see §3) — escalate to an Opus/Fable planner only when a step earns it; never skip the Opus verification gate before commit.
 4. **Small, verifiable steps.** One coherent change at a time; verify before moving on.
 5. **Keep shared contracts in `packages/shared`.** FE and BE must never drift on types — change the Zod schema, both sides follow.
 6. **Do not expand MVP scope** (§5) without the user explicitly approving. Park ideas in §7 Backlog.
@@ -115,5 +121,7 @@ _(Ideas that are out of current scope — do not build without approval.)_
 - **2026-07-01 — [AUTH]** Implemented the Auth module per ADR-0005: email/password (argon2id) + Google OAuth (Passport), JWT access token (in JSON body) + opaque rotating refresh token (sha256-hashed at rest, httpOnly+SameSite=strict cookie scoped to `/api/v1/auth`, `Secure` in prod) with **reuse detection** (a reused/revoked/expired refresh token revokes the whole `family` and 401s). Routes under `/api/v1/auth`: register(409 on dup)/login/refresh/logout/me(JwtAuthGuard)/google/google/callback. Added: root `docker-compose.yml` (postgres:16 + redis:7, healthchecks, named volume), `.env.example` split into `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` + `WEB_ORIGIN` (+ `apps/api/.env.example`), fail-fast env validation for the new secrets, `RefreshToken` Prisma model + **applied** initial migration `20260701180835_init` (all models), shared auth zod schemas (`registerSchema`/`loginSchema`/`authUserSchema`/`authResponseSchema` — never expose passwordHash), `@nestjs/throttler` global guard (5/min on login+register), `cookie-parser`, CORS locked to `WEB_ORIGIN`. **Verified (all PASSED):** `pnpm install`, shared build, `nest build`, root `pnpm typecheck` (3 pkgs), 11 unit tests (AuthService, incl. reuse-detection), and 10 supertest **e2e against a real Postgres** (register→login→me(bearer)→refresh-rotation→reuse-detection→logout), plus a live HTTP curl round-trip and a fail-fast boot check. New deps: argon2 ^0.44, @nestjs/jwt ^10.2, @nestjs/passport ^10.0.3, passport ^0.7, passport-jwt ^4, passport-google-oauth20 ^2, @nestjs/throttler ^6.5, cookie-parser ^1.4 (+types, jest/ts-jest/supertest/@nestjs/testing). Docker note: local host ports 5432/6379 were occupied by an unrelated `eventhub_*` stack on this dev machine, so the **committed** `docker-compose.yml` and both `.env.example` files map Postgres to host port **5434** and Redis to host port **6380** (container-internal ports unchanged at 5432/6379) — the migration and e2e run were against these real, docker-composed services. On a clean machine with 5432/6379 free, remap back if desired. Follow-ups before prod: real Google OAuth creds, HTTPS so `Secure` cookies apply, strong rotated JWT secrets, and consider a refresh-token cleanup job + optional access-token denylist.
 
 - **2026-07-01 — [AUTH]** Review found a validation defect: `register`/`login` used `@UsePipes(ZodValidationPipe)` with no `@Body()` param, so request-body validation was a silent no-op (malformed input reached the service; invalid register returned 500, not 400). Fix (Sonnet): rebound to `@Body(new ZodValidationPipe(schema))` and hardened the pipe to only run when `metadata.type === 'body'`; added 4 e2e regression cases (bad email / short password / missing name / malformed login → 400). **Re-verified by orchestrator against live docker Postgres (5434): `nest build`, `pnpm typecheck`, 11/11 unit, 14/14 e2e — all PASSED.**
+
+- **2026-07-02 — [PROCESS]** Revised model routing (§3) from "the big model always plans" to **tiered escalation by ambiguity/blast-radius**: Sonnet plans+implements clear ≤2-module steps; Opus plans cross-cutting/undocumented steps; Fable only when Opus is genuinely circling. Foundation review now defaults to a fresh Opus adversarial pass (not a paid Fable pass). Opus verification gate before commit stays mandatory. Rationale (user): stop paying premium models on trivial work. Updated §3, §4, and memory.
 
 _Next up: Workspaces + Projects CRUD (workspace membership/roles, project keys) — the first authZ surface on top of this auth layer._
