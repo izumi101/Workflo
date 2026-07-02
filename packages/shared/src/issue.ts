@@ -14,12 +14,26 @@ export const projectSchema = z.object({
 });
 export type Project = z.infer<typeof projectSchema>;
 
-export const createProjectSchema = projectSchema.pick({
-  workspaceId: true,
-  key: true,
-  name: true,
-});
+export const createProjectSchema = projectSchema
+  .pick({
+    workspaceId: true,
+    name: true,
+  })
+  .extend({
+    key: z
+      .string()
+      .min(2)
+      .max(10)
+      .regex(/^[A-Z][A-Z0-9]*$/, "key must be uppercase letters/digits, starting with a letter"),
+  });
 export type CreateProject = z.infer<typeof createProjectSchema>;
+
+export const updateProjectSchema = projectSchema
+  .pick({
+    name: true,
+  })
+  .partial();
+export type UpdateProject = z.infer<typeof updateProjectSchema>;
 
 /**
  * Issue schema — mirrors the `Issue` Prisma model
