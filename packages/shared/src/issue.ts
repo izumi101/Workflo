@@ -59,8 +59,11 @@ export const issueSchema = z.object({
 });
 export type Issue = z.infer<typeof issueSchema>;
 
+/**
+ * projectId is intentionally NOT part of this schema — it's supplied by the
+ * route (`POST /projects/:id/issues`), never trusted from the request body.
+ */
 export const createIssueSchema = z.object({
-  projectId: z.string().cuid(),
   title: z.string().min(1).max(255),
   description: z.string().max(20_000).nullable().optional(),
   type: issueTypeSchema.default("TASK"),
@@ -72,11 +75,24 @@ export const createIssueSchema = z.object({
 });
 export type CreateIssue = z.infer<typeof createIssueSchema>;
 
-export const updateIssueSchema = createIssueSchema
-  .partial()
-  .extend({
-    status: issueStatusSchema.optional(),
-    rank: z.string().optional(),
-  })
-  .omit({ projectId: true });
+export const updateIssueSchema = createIssueSchema.partial().extend({
+  status: issueStatusSchema.optional(),
+  rank: z.string().optional(),
+});
 export type UpdateIssue = z.infer<typeof updateIssueSchema>;
+
+/**
+ * Query params for listing issues within a project (filters + cursor
+ * pagination). `q` is a simple case-insensitive contains match on
+ * title/description — a placeholder until dedicated Postgres FTS search
+ * (ADR-0006) lands; do not read this as a full-text search contract.
+ */
+export const issueListQuerySchema = z.object({
+  status: issueStatusSchema.optional(),
+  assigneeId: z.string().cuid().optional(),
+  labelId: z.string().cuid().optional(),
+  q: z.string().min(1).max(255).optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(100).default(25),
+});
+export type IssueListQuery = z.infer<typeof issueListQuerySchema>;
