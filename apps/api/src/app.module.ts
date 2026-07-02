@@ -8,6 +8,8 @@ import { PrismaModule } from "./prisma/prisma.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { WorkspacesModule } from "./workspaces/workspaces.module.js";
 import { ProjectsModule } from "./projects/projects.module.js";
+import { IssuesModule } from "./issues/issues.module.js";
+import { LabelsModule } from "./labels/labels.module.js";
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { ProjectsModule } from "./projects/projects.module.js";
     AuthModule,
     WorkspacesModule,
     ProjectsModule,
+    IssuesModule,
+    LabelsModule,
   ],
   providers: [
     {

@@ -11,6 +11,11 @@ export const RESOLVE_WORKSPACE_FROM_KEY = "workflo:resolveWorkspaceFrom";
  *    the request body/query (e.g. POST /projects, GET /projects?workspaceId=).
  *  - "project:id" — read `req.params.id` as a PROJECT id, look the project
  *    up, and use its workspaceId (e.g. GET/PATCH/DELETE /projects/:id).
+ *  - "issue:key" — read `req.params.key` as a human issue key ("WF-123"),
+ *    parse it, look up the project by key + the issue by number, and use its
+ *    workspaceId (e.g. GET/PATCH/DELETE /issues/:key).
+ *  - "label:id" — read `req.params.id` as a LABEL id, look the label up via
+ *    its project, and use the project's workspaceId (e.g. DELETE /labels/:id).
  *
  * Defaults to "param:id" (workspace routes like GET/PATCH/DELETE /workspaces/:id)
  * when no metadata is set.
@@ -20,7 +25,9 @@ export type WorkspaceResolutionStrategy =
   | "param:id"
   | "body:workspaceId"
   | "query:workspaceId"
-  | "project:id";
+  | "project:id"
+  | "issue:key"
+  | "label:id";
 
 export const ResolveWorkspaceFrom = (strategy: WorkspaceResolutionStrategy) =>
   SetMetadata(RESOLVE_WORKSPACE_FROM_KEY, strategy);

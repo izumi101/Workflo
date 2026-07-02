@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { PrismaService } from "../../prisma/prisma.service.js";
+import { parseIssueKey } from "../../common/issue-key.js";
 import {
   RESOLVE_WORKSPACE_FROM_KEY,
   type WorkspaceResolutionStrategy,
@@ -80,6 +81,33 @@ export class WorkspaceMemberGuard implements CanActivate {
           throw new NotFoundException("Project not found");
         }
         return project.workspaceId;
+      }
+      case "issue:key": {
+        // Project.key is only unique WITHIN a workspace (@@unique([workspaceId, key])),
+        // so multiple workspaces can have a project with the same key. Find the
+        // issue by joining through all same-keyed projects rather than assuming
+        // the first project match is the right one.
+        const rawKey = this.require(request.params?.key, "key param");
+        const { projectKey, number } = parseIssueKey(rawKey);
+        const issue = await this.prisma.issue.findFirst({
+          where: { number, project: { key: projectKey } },
+          select: { project: { select: { workspaceId: true } } },
+        });
+        if (!issue) {
+          throw new NotFoundException("Issue not found");
+        }
+        return issue.project.workspaceId;
+      }
+      case "label:id": {
+        const labelId = this.require(request.params?.id, "id param");
+        const label = await this.prisma.label.findUnique({
+          where: { id: labelId },
+          select: { project: { select: { workspaceId: true } } },
+        });
+        if (!label) {
+          throw new NotFoundException("Label not found");
+        }
+        return label.project.workspaceId;
       }
       default:
         throw new NotFoundException("Workspace not found");

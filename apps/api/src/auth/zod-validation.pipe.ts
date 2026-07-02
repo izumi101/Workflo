@@ -39,3 +39,31 @@ export class ZodValidationPipe implements PipeTransform {
     return result.data;
   }
 }
+
+/**
+ * Same idea as ZodValidationPipe but for query string params (e.g.
+ * `@Query(new ZodQueryValidationPipe(issueListQuerySchema)) query: IssueListQuery`).
+ * Kept as a separate pipe (rather than widening ZodValidationPipe) so each
+ * pipe stays a safe no-op outside its intended arg type.
+ */
+export class ZodQueryValidationPipe implements PipeTransform {
+  constructor(private readonly schema: ZodSchema) {}
+
+  transform(value: unknown, metadata?: ArgumentMetadata) {
+    if (metadata && metadata.type !== "query") {
+      return value;
+    }
+
+    const result = this.schema.safeParse(value);
+    if (!result.success) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        issues: result.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      });
+    }
+    return result.data;
+  }
+}
