@@ -1,10 +1,12 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { Test } from "@nestjs/testing";
 import { IssuesService } from "./issues.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 
 describe("IssuesService", () => {
   let service: IssuesService;
+  let eventsMock: { emit: jest.Mock };
 
   const txMock = {
     project: { update: jest.fn() },
@@ -48,9 +50,14 @@ describe("IssuesService", () => {
   beforeEach(async () => {
     jest.resetAllMocks();
     prismaMock.$transaction.mockImplementation((cb: (tx: typeof txMock) => unknown) => cb(txMock));
+    eventsMock = { emit: jest.fn() };
 
     const moduleRef = await Test.createTestingModule({
-      providers: [IssuesService, { provide: PrismaService, useValue: prismaMock }],
+      providers: [
+        IssuesService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: EventEmitter2, useValue: eventsMock },
+      ],
     }).compile();
 
     service = moduleRef.get(IssuesService);
@@ -72,6 +79,7 @@ describe("IssuesService", () => {
         select: { counter: true },
       });
       expect(first.number).toBe(1);
+      expect(eventsMock.emit).toHaveBeenCalledWith("issue.created", { projectId: "proj_1", issue: first });
 
       // Second create: counter goes 1 -> 2.
       txMock.project.update.mockResolvedValueOnce({ counter: 2 });
@@ -272,6 +280,7 @@ describe("IssuesService", () => {
       expect(updateCall.data.rank > "a1").toBe(true);
       expect(updateCall.data.rank < "a2").toBe(true);
       expect(result.status).toBe("TODO");
+      expect(eventsMock.emit).toHaveBeenCalledWith("issue.moved", { projectId: "proj_1", issue: result });
     });
 
     it("places the issue at the end of the column when both neighbor ids are omitted", async () => {
@@ -344,6 +353,10 @@ describe("IssuesService", () => {
       await service.remove("WF-1");
 
       expect(prismaMock.issue.delete).toHaveBeenCalledWith({ where: { id: "issue_1" } });
+      expect(eventsMock.emit).toHaveBeenCalledWith("issue.deleted", {
+        projectId: "proj_1",
+        issueId: "issue_1",
+      });
     });
 
     it("throws 404 when the issue doesn't exist", async () => {

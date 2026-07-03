@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { validateEnv } from "./config/env.validation.js";
 import { HealthModule } from "./health/health.module.js";
@@ -10,6 +11,7 @@ import { WorkspacesModule } from "./workspaces/workspaces.module.js";
 import { ProjectsModule } from "./projects/projects.module.js";
 import { IssuesModule } from "./issues/issues.module.js";
 import { LabelsModule } from "./labels/labels.module.js";
+import { RealtimeModule } from "./realtime/realtime.module.js";
 
 @Module({
   imports: [
@@ -17,6 +19,7 @@ import { LabelsModule } from "./labels/labels.module.js";
       isGlobal: true,
       validate: validateEnv,
     }),
+    EventEmitterModule.forRoot(),
     ThrottlerModule.forRoot([
       {
         ttl: 60000,
@@ -30,6 +33,7 @@ import { LabelsModule } from "./labels/labels.module.js";
     ProjectsModule,
     IssuesModule,
     LabelsModule,
+    RealtimeModule,
   ],
   providers: [
     {

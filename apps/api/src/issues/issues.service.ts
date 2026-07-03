@@ -1,5 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { rankBetween, type CreateIssue, type Issue, type IssueListQuery, type MoveIssue, type UpdateIssue } from "@workflo/shared";
+import { EventEmitter2 } from "@nestjs/event-emitter";
+import {
+  rankBetween,
+  REALTIME_EVENTS,
+  type CreateIssue,
+  type Issue,
+  type IssueListQuery,
+  type MoveIssue,
+  type UpdateIssue,
+} from "@workflo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { parseIssueKey } from "../common/issue-key.js";
 
@@ -52,7 +61,10 @@ export interface IssueListResult {
 
 @Injectable()
 export class IssuesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   /**
    * Creates an issue in `projectId`. Allocates the human-readable `number`
@@ -95,7 +107,9 @@ export class IssuesService {
       });
     });
 
-    return toIssue(issue);
+    const dto = toIssue(issue);
+    this.events.emit(REALTIME_EVENTS.ISSUE_CREATED, { projectId, issue: dto });
+    return dto;
   }
 
   async listByProject(projectId: string, query: IssueListQuery): Promise<IssueListResult> {
@@ -165,7 +179,9 @@ export class IssuesService {
       include: ISSUE_INCLUDE,
     });
 
-    return toIssue(issue);
+    const dto = toIssue(issue);
+    this.events.emit(REALTIME_EVENTS.ISSUE_UPDATED, { projectId: existing.projectId, issue: dto });
+    return dto;
   }
 
   /**
@@ -209,7 +225,9 @@ export class IssuesService {
       include: ISSUE_INCLUDE,
     });
 
-    return toIssue(issue);
+    const dto = toIssue(issue);
+    this.events.emit(REALTIME_EVENTS.ISSUE_MOVED, { projectId: existing.projectId, issue: dto });
+    return dto;
   }
 
   private async findNeighbor(
@@ -228,6 +246,10 @@ export class IssuesService {
   async remove(key: string): Promise<void> {
     const existing = await this.findRowByKey(key);
     await this.prisma.issue.delete({ where: { id: existing.id } });
+    this.events.emit(REALTIME_EVENTS.ISSUE_DELETED, {
+      projectId: existing.projectId,
+      issueId: existing.id,
+    });
   }
 
   private async findRowByKey(key: string): Promise<{ id: string; projectId: string }> {
