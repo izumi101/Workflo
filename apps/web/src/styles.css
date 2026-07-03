@@ -722,3 +722,191 @@ a {
   color: #f87171;
   border: none;
 }
+
+/* --- View toggle (Board / Backlog) --- */
+
+.view-toggle {
+  display: inline-flex;
+  gap: 0.25rem;
+  border: 1px solid #22262b;
+  border-radius: 999px;
+  padding: 0.2rem;
+}
+
+.view-toggle__link {
+  font-size: 0.82rem;
+  color: #9aa0a6;
+  text-decoration: none;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+}
+
+.view-toggle__link:hover {
+  color: #e6e6e6;
+}
+
+.view-toggle__link--active {
+  background: #1a1d21;
+  color: #e6e6e6;
+}
+
+/* --- Backlog / list view --- */
+
+.backlog-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  gap: 1rem;
+}
+
+.backlog-page__header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.backlog-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+  border: 1px solid #22262b;
+  border-radius: 10px;
+  background: #101317;
+  padding: 0.9rem 1rem;
+}
+
+.backlog-toolbar__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: #b5bac1;
+}
+
+.backlog-toolbar__field select {
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #0f1215;
+  color: #e6e6e6;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.85rem;
+  min-width: 150px;
+}
+
+.backlog-toolbar__field--search {
+  flex: 1;
+  min-width: 200px;
+}
+
+.backlog-toolbar__field--search input {
+  width: 100%;
+}
+
+.backlog-toolbar__clear {
+  align-self: flex-end;
+  font-size: 0.8rem;
+}
+
+.backlog-page__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.backlog-page__count {
+  font-size: 0.82rem;
+  color: #9aa0a6;
+}
+
+.backlog-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #22262b;
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 0.88rem;
+}
+
+.backlog-table thead {
+  background: #101317;
+}
+
+.backlog-table th {
+  text-align: left;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid #22262b;
+}
+
+.backlog-table td {
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid #1a1d21;
+  color: #e6e6e6;
+  vertical-align: middle;
+}
+
+.backlog-table__row {
+  cursor: pointer;
+}
+
+.backlog-table__row:hover {
+  background: #14171b;
+}
+
+.backlog-table__key {
+  font-size: 0.78rem;
+  color: #6b7280;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.backlog-table__title {
+  color: #e6e6e6;
+}
+
+.backlog-status-chip {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid #333;
+  color: #9aa0a6;
+  white-space: nowrap;
+}
+
+.backlog-status-chip--todo {
+  color: #9aa0a6;
+  border-color: #333;
+}
+
+.backlog-status-chip--in_progress {
+  color: #facc15;
+  border-color: #ca8a04;
+}
+
+.backlog-status-chip--done {
+  color: #4ade80;
+  border-color: #16a34a;
+}
+
+.backlog-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.label-chip {
+  font-size: 0.72rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid #333;
+  white-space: nowrap;
+}
+
+.backlog-page__load-more {
+  align-self: center;
+}

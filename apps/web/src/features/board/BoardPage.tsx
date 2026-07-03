@@ -20,6 +20,7 @@ import { IssueCard } from "./IssueCard.js";
 import { useBoardRealtime } from "./useBoardRealtime.js";
 import { api } from "../../lib/api.js";
 import { useAuthStore } from "../../store/auth.store.js";
+import { ViewToggle } from "../../components/ViewToggle.js";
 
 const STATUSES: IssueStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 
@@ -157,6 +158,7 @@ function BoardPageInner({ projectId }: { projectId: string }) {
     <main className="board-page">
       <div className="board-page__header">
         <h1 className="board-page__title">{projectKey || "Board"}</h1>
+        <ViewToggle projectId={projectId} active="board" />
         <span className="presence-chip" title="Members currently viewing this board">
           <span className="presence-chip__dot" />
           {onlineCount} online
