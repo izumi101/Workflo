@@ -7,6 +7,7 @@ import { LoginPage } from "./pages/LoginPage.js";
 import { RegisterPage } from "./pages/RegisterPage.js";
 import { HomePage } from "./pages/HomePage.js";
 import { BoardPage } from "./features/board/BoardPage.js";
+import { BacklogPage } from "./features/backlog/BacklogPage.js";
 import { IssueDetailPage } from "./features/issue-detail/IssueDetailPage.js";
 
 export function App() {
@@ -39,6 +40,14 @@ export function App() {
             element={
               <RequireAuth>
                 <BoardPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/projects/:projectId/backlog"
+            element={
+              <RequireAuth>
+                <BacklogPage />
               </RequireAuth>
             }
           />
