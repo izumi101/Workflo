@@ -17,7 +17,9 @@ import { groupByStatus, issuesQueryKey, useCreateIssue, useMoveIssue, useProject
 import type { IssueListResult } from "./board.queries.js";
 import { Column } from "./Column.js";
 import { IssueCard } from "./IssueCard.js";
+import { useBoardRealtime } from "./useBoardRealtime.js";
 import { api } from "../../lib/api.js";
+import { useAuthStore } from "../../store/auth.store.js";
 
 const STATUSES: IssueStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 
@@ -46,6 +48,10 @@ function BoardPageInner({ projectId }: { projectId: string }) {
   // and the move endpoint need the project's short `key` (e.g. "WF").
   const { data: project } = useProjectById(projectId);
   const projectKey = project?.key ?? "";
+
+  const { onlineUserIds } = useBoardRealtime(projectId);
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const onlineCount = new Set([...onlineUserIds, ...(currentUserId ? [currentUserId] : [])]).size;
 
   const [activeIssue, setActiveIssue] = useState<Issue | null>(null);
 
@@ -149,7 +155,13 @@ function BoardPageInner({ projectId }: { projectId: string }) {
 
   return (
     <main className="board-page">
-      <h1 className="board-page__title">{projectKey || "Board"}</h1>
+      <div className="board-page__header">
+        <h1 className="board-page__title">{projectKey || "Board"}</h1>
+        <span className="presence-chip" title="Members currently viewing this board">
+          <span className="presence-chip__dot" />
+          {onlineCount} online
+        </span>
+      </div>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}

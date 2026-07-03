@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { AuthResponse, AuthUser, Login, Register } from "@workflo/shared";
 import { api, configureApiAuth } from "../lib/api.js";
+import { configureSocketAuth, connectSocket, disconnectSocket } from "../lib/socket.js";
 
 type BootstrapStatus = "idle" | "loading" | "done";
 
@@ -22,11 +23,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (input) => {
     const res = await api.post<AuthResponse>("/auth/login", input);
     set({ accessToken: res.accessToken, user: res.user });
+    connectSocket();
   },
 
   register: async (input) => {
     const res = await api.post<AuthResponse>("/auth/register", input);
     set({ accessToken: res.accessToken, user: res.user });
+    connectSocket();
   },
 
   logout: async () => {
@@ -34,6 +37,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await api.post("/auth/logout");
     } finally {
       set({ accessToken: null, user: null });
+      disconnectSocket();
     }
   },
 
@@ -45,6 +49,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const res = await api.post<AuthResponse>("/auth/refresh");
       set({ accessToken: res.accessToken, user: res.user, bootstrapStatus: "done" });
+      connectSocket();
     } catch {
       set({ accessToken: null, user: null, bootstrapStatus: "done" });
     }
@@ -57,5 +62,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 configureApiAuth({
   getAccessToken: () => useAuthStore.getState().accessToken,
   setAccessToken: (token) => useAuthStore.setState({ accessToken: token }),
-  onAuthFailure: () => useAuthStore.setState({ accessToken: null, user: null }),
+  onAuthFailure: () => {
+    useAuthStore.setState({ accessToken: null, user: null });
+    disconnectSocket();
+  },
 });
+
+// Same wiring pattern as api.ts — socket.ts stays framework-agnostic and
+// always reads the latest token straight from the store.
+configureSocketAuth(() => useAuthStore.getState().accessToken);
