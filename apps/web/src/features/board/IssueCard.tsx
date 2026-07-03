@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Issue } from "@workflo/shared";
@@ -5,6 +7,15 @@ import type { Issue } from "@workflo/shared";
 function issueKey(issue: Issue, projectKey: string): string {
   return `${projectKey}-${issue.number}`;
 }
+
+// dnd-kit's PointerSensor (activationConstraint: { distance: 4 } in
+// BoardPage.tsx) only starts a drag once the pointer has moved past this
+// distance, but its `listeners` still capture pointerdown unconditionally.
+// To let a plain click navigate to the issue detail page without
+// interfering with dragging, track the pointerdown position ourselves and
+// only navigate on pointerup if the pointer barely moved (i.e. dnd-kit
+// never promoted this gesture to a drag).
+const CLICK_MOVE_THRESHOLD = 4;
 
 export function IssueCard({
   issue,
@@ -18,6 +29,8 @@ export function IssueCard({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: issue.id,
   });
+  const navigate = useNavigate();
+  const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -25,12 +38,32 @@ export function IssueCard({
     opacity: isDragging ? 0.5 : 1,
   };
 
+  function handlePointerDown(e: React.PointerEvent) {
+    pointerDownPos.current = { x: e.clientX, y: e.clientY };
+  }
+
+  function handlePointerUp(e: React.PointerEvent) {
+    const start = pointerDownPos.current;
+    pointerDownPos.current = null;
+    if (!start) return;
+    const dx = Math.abs(e.clientX - start.x);
+    const dy = Math.abs(e.clientY - start.y);
+    if (dx <= CLICK_MOVE_THRESHOLD && dy <= CLICK_MOVE_THRESHOLD) {
+      navigate(`/issues/${issueKey(issue, projectKey)}`);
+    }
+  }
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
+      onPointerDown={(e) => {
+        listeners?.onPointerDown?.(e);
+        handlePointerDown(e);
+      }}
+      onPointerUp={handlePointerUp}
       className={`issue-card issue-card--${issue.priority.toLowerCase()}`}
     >
       <div className="issue-card__top">

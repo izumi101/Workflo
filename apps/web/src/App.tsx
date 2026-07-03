@@ -7,6 +7,7 @@ import { LoginPage } from "./pages/LoginPage.js";
 import { RegisterPage } from "./pages/RegisterPage.js";
 import { HomePage } from "./pages/HomePage.js";
 import { BoardPage } from "./features/board/BoardPage.js";
+import { IssueDetailPage } from "./features/issue-detail/IssueDetailPage.js";
 
 export function App() {
   const bootstrap = useAuthStore((s) => s.bootstrap);
@@ -38,6 +39,14 @@ export function App() {
             element={
               <RequireAuth>
                 <BoardPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/issues/:key"
+            element={
+              <RequireAuth>
+                <IssueDetailPage />
               </RequireAuth>
             }
           />
