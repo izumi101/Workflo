@@ -11,6 +11,7 @@ import { WorkspacesModule } from "./workspaces/workspaces.module.js";
 import { ProjectsModule } from "./projects/projects.module.js";
 import { IssuesModule } from "./issues/issues.module.js";
 import { LabelsModule } from "./labels/labels.module.js";
+import { CommentsModule } from "./comments/comments.module.js";
 import { RealtimeModule } from "./realtime/realtime.module.js";
 
 @Module({
@@ -33,6 +34,7 @@ import { RealtimeModule } from "./realtime/realtime.module.js";
     ProjectsModule,
     IssuesModule,
     LabelsModule,
+    CommentsModule,
     RealtimeModule,
   ],
   providers: [

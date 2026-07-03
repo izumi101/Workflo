@@ -109,6 +109,17 @@ export class WorkspaceMemberGuard implements CanActivate {
         }
         return label.project.workspaceId;
       }
+      case "comment:id": {
+        const commentId = this.require(request.params?.id, "id param");
+        const comment = await this.prisma.comment.findUnique({
+          where: { id: commentId },
+          select: { issue: { select: { project: { select: { workspaceId: true } } } } },
+        });
+        if (!comment) {
+          throw new NotFoundException("Comment not found");
+        }
+        return comment.issue.project.workspaceId;
+      }
       default:
         throw new NotFoundException("Workspace not found");
     }

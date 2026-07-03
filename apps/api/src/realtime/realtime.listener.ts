@@ -3,6 +3,8 @@ import { OnEvent } from "@nestjs/event-emitter";
 import {
   projectRoom,
   REALTIME_EVENTS,
+  type CommentDeletedEventPayload,
+  type CommentEventPayload,
   type IssueDeletedEventPayload,
   type IssueEventPayload,
 } from "@workflo/shared";
@@ -42,8 +44,30 @@ export class RealtimeListener {
     this.gateway.server.to(projectRoom(payload.projectId)).emit(REALTIME_EVENTS.ISSUE_DELETED, payload);
   }
 
+  @OnEvent(REALTIME_EVENTS.COMMENT_ADDED)
+  onCommentAdded(payload: CommentEventPayload): void {
+    this.broadcastComment(REALTIME_EVENTS.COMMENT_ADDED, payload);
+  }
+
+  @OnEvent(REALTIME_EVENTS.COMMENT_UPDATED)
+  onCommentUpdated(payload: CommentEventPayload): void {
+    this.broadcastComment(REALTIME_EVENTS.COMMENT_UPDATED, payload);
+  }
+
+  @OnEvent(REALTIME_EVENTS.COMMENT_DELETED)
+  onCommentDeleted(payload: CommentDeletedEventPayload): void {
+    this.logger.debug(`Broadcasting ${REALTIME_EVENTS.COMMENT_DELETED} to ${projectRoom(payload.projectId)}`);
+    this.gateway.server.to(projectRoom(payload.projectId)).emit(REALTIME_EVENTS.COMMENT_DELETED, payload);
+  }
+
   private broadcast(event: string, payload: IssueEventPayload): void {
     this.logger.debug(`Broadcasting ${event} to ${projectRoom(payload.projectId)}`);
     this.gateway.server.to(projectRoom(payload.projectId)).emit(event, payload.issue);
+  }
+
+  /** comment.added/comment.updated emit the exact CommentEventPayload shape (see packages/shared/src/realtime.ts). */
+  private broadcastComment(event: string, payload: CommentEventPayload): void {
+    this.logger.debug(`Broadcasting ${event} to ${projectRoom(payload.projectId)}`);
+    this.gateway.server.to(projectRoom(payload.projectId)).emit(event, payload);
   }
 }
