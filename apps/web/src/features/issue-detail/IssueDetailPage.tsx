@@ -4,6 +4,7 @@ import type { IssueStatus, Priority } from "@workflo/shared";
 import { CommentsSection } from "./CommentsSection.js";
 import { useIssue, useProject, useUpdateIssue, useWorkspaceMembers } from "./issue-detail.queries.js";
 import { useIssueDetailRealtime } from "./useIssueDetailRealtime.js";
+import { useActiveWorkspaceStore } from "../../store/active-workspace.store.js";
 
 const STATUS_LABELS: Record<IssueStatus, string> = {
   TODO: "To Do",
@@ -29,6 +30,13 @@ function IssueDetailPageInner({ issueKey }: { issueKey: string }) {
   const updateIssue = useUpdateIssue(issueKey);
 
   useIssueDetailRealtime(issue?.projectId, issueKey);
+
+  const setActiveWorkspace = useActiveWorkspaceStore((s) => s.setActiveWorkspace);
+  useEffect(() => {
+    if (project) {
+      setActiveWorkspace({ workspaceId: project.workspaceId, name: project.key });
+    }
+  }, [project, setActiveWorkspace]);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");

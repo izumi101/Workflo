@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { AuthResponse, AuthUser, Login, Register } from "@workflo/shared";
 import { api, configureApiAuth } from "../lib/api.js";
 import { configureSocketAuth, connectSocket, disconnectSocket } from "../lib/socket.js";
+import { useActiveWorkspaceStore } from "./active-workspace.store.js";
 
 type BootstrapStatus = "idle" | "loading" | "done";
 
@@ -38,6 +39,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } finally {
       set({ accessToken: null, user: null });
       disconnectSocket();
+      useActiveWorkspaceStore.getState().clearActiveWorkspace();
     }
   },
 
@@ -65,6 +67,7 @@ configureApiAuth({
   onAuthFailure: () => {
     useAuthStore.setState({ accessToken: null, user: null });
     disconnectSocket();
+    useActiveWorkspaceStore.getState().clearActiveWorkspace();
   },
 });
 
