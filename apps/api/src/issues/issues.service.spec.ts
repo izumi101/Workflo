@@ -15,6 +15,7 @@ describe("IssuesService", () => {
 
   const prismaMock = {
     $transaction: jest.fn((cb: (tx: typeof txMock) => unknown) => cb(txMock)),
+    $queryRaw: jest.fn(),
     project: { findUnique: jest.fn() },
     issue: {
       findFirst: jest.fn(),
@@ -182,17 +183,17 @@ describe("IssuesService", () => {
   });
 
   describe("listByProject — filter query building", () => {
-    it("builds a where clause from status/assigneeId/labelId/q filters", async () => {
+    it("builds a where clause from status/assigneeId/labelId filters (no q)", async () => {
       prismaMock.issue.findMany.mockResolvedValue([]);
 
       await service.listByProject("proj_1", {
         status: "IN_PROGRESS",
         assigneeId: "user_2",
         labelId: "label_1",
-        q: "login bug",
         limit: 25,
       } as any);
 
+      expect(prismaMock.$queryRaw).not.toHaveBeenCalled();
       expect(prismaMock.issue.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
@@ -200,15 +201,42 @@ describe("IssuesService", () => {
             status: "IN_PROGRESS",
             assigneeId: "user_2",
             labels: { some: { id: "label_1" } },
-            OR: [
-              { title: { contains: "login bug", mode: "insensitive" } },
-              { description: { contains: "login bug", mode: "insensitive" } },
-            ],
           },
           orderBy: [{ status: "asc" }, { rank: "asc" }],
           take: 26,
         }),
       );
+    });
+
+    it("resolves q via FTS ($queryRaw) and narrows the Prisma where by the matching ids", async () => {
+      prismaMock.$queryRaw.mockResolvedValue([{ id: "issue_1" }, { id: "issue_2" }]);
+      prismaMock.issue.findMany.mockResolvedValue([]);
+
+      await service.listByProject("proj_1", {
+        status: "IN_PROGRESS",
+        q: "login bug",
+        limit: 25,
+      } as any);
+
+      expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(prismaMock.issue.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectId: "proj_1",
+            status: "IN_PROGRESS",
+            id: { in: ["issue_1", "issue_2"] },
+          },
+        }),
+      );
+    });
+
+    it("short-circuits to an empty page when q matches zero issues, without calling findMany", async () => {
+      prismaMock.$queryRaw.mockResolvedValue([]);
+
+      const result = await service.listByProject("proj_1", { q: "nomatch", limit: 25 } as any);
+
+      expect(prismaMock.issue.findMany).not.toHaveBeenCalled();
+      expect(result).toEqual({ items: [], nextCursor: null });
     });
 
     it("omits optional filters when not provided", async () => {
