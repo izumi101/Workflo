@@ -49,6 +49,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 1rem;
   padding: 0.75rem 1.5rem;
   border-bottom: 1px solid #22262b;
   background: #101317;
@@ -57,6 +58,7 @@ body {
 .topbar__brand {
   font-weight: 700;
   letter-spacing: 0.02em;
+  flex-shrink: 0;
 }
 
 .topbar__user {
@@ -64,6 +66,125 @@ body {
   align-items: center;
   gap: 0.75rem;
   font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+/* --- Global search --- */
+
+.global-search {
+  position: relative;
+  flex: 1;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.global-search__input {
+  width: 100%;
+}
+
+.global-search__dropdown {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.35rem;
+  max-height: 360px;
+  overflow-y: auto;
+  list-style: none;
+  padding: 0.3rem;
+  background: #171b1f;
+  border: 1px solid #2a2f36;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.global-search__status {
+  padding: 0.6rem 0.7rem;
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+
+.global-search__result {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.global-search__result:hover,
+.global-search__result--active {
+  background: #22262b;
+  border: none;
+}
+
+.global-search__result-key {
+  font-size: 0.72rem;
+  color: #6b7280;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.global-search__result-title {
+  flex: 1;
+  color: #e6e6e6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.global-search__result-status,
+.global-search__result-priority {
+  font-size: 0.68rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid #333;
+  color: #9aa0a6;
+  white-space: nowrap;
+}
+
+.global-search__result-status--todo {
+  color: #9aa0a6;
+  border-color: #333;
+}
+
+.global-search__result-status--in_progress {
+  color: #facc15;
+  border-color: #ca8a04;
+}
+
+.global-search__result-status--done {
+  color: #4ade80;
+  border-color: #16a34a;
+}
+
+.global-search__result-priority--urgent {
+  color: #f87171;
+  border-color: #b91c1c;
+}
+
+.global-search__result-priority--high {
+  color: #fb923c;
+  border-color: #c2410c;
+}
+
+.global-search__result-priority--medium {
+  color: #facc15;
+  border-color: #ca8a04;
+}
+
+.global-search__result-priority--low {
+  color: #4ade80;
+  border-color: #16a34a;
 }
 
 .app-loading {

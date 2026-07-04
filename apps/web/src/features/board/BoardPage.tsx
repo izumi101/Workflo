@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   DndContext,
@@ -20,6 +20,7 @@ import { IssueCard } from "./IssueCard.js";
 import { useBoardRealtime } from "./useBoardRealtime.js";
 import { api } from "../../lib/api.js";
 import { useAuthStore } from "../../store/auth.store.js";
+import { useActiveWorkspaceStore } from "../../store/active-workspace.store.js";
 import { ViewToggle } from "../../components/ViewToggle.js";
 
 const STATUSES: IssueStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
@@ -49,6 +50,13 @@ function BoardPageInner({ projectId }: { projectId: string }) {
   // and the move endpoint need the project's short `key` (e.g. "WF").
   const { data: project } = useProjectById(projectId);
   const projectKey = project?.key ?? "";
+
+  const setActiveWorkspace = useActiveWorkspaceStore((s) => s.setActiveWorkspace);
+  useEffect(() => {
+    if (project) {
+      setActiveWorkspace({ workspaceId: project.workspaceId, name: projectKey });
+    }
+  }, [project, projectKey, setActiveWorkspace]);
 
   const { onlineUserIds } = useBoardRealtime(projectId);
   const currentUserId = useAuthStore((s) => s.user?.id);

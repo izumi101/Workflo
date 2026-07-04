@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { Issue, IssueStatus, Project, WorkspaceMember } from "@workflo/shared";
 import { api } from "../../lib/api.js";
+import { useActiveWorkspaceStore } from "../../store/active-workspace.store.js";
 import { ViewToggle } from "../../components/ViewToggle.js";
 import { useProjectIssuesFiltered, useProjectLabels } from "./backlog.queries.js";
 import type { BacklogFilters } from "./backlog.queries.js";
@@ -55,6 +56,13 @@ function BacklogPageInner({ projectId }: { projectId: string }) {
   const projectKey = project?.key ?? "";
   const { data: members } = useWorkspaceMembers(project?.workspaceId);
   const { data: labels } = useProjectLabels(projectId);
+
+  const setActiveWorkspace = useActiveWorkspaceStore((s) => s.setActiveWorkspace);
+  useEffect(() => {
+    if (project) {
+      setActiveWorkspace({ workspaceId: project.workspaceId, name: projectKey });
+    }
+  }, [project, projectKey, setActiveWorkspace]);
 
   // Filter state lives in the URL so a filtered view is shareable/bookmarkable.
   const status = (searchParams.get("status") as IssueStatus | null) ?? "";
