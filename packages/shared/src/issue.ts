@@ -82,12 +82,6 @@ export const updateIssueSchema = createIssueSchema.partial().extend({
 export type UpdateIssue = z.infer<typeof updateIssueSchema>;
 
 /**
- * Query params for listing issues within a project (filters + cursor
- * pagination). `q` is a simple case-insensitive contains match on
- * title/description — a placeholder until dedicated Postgres FTS search
- * (ADR-0006) lands; do not read this as a full-text search contract.
- */
-/**
  * Body for `POST /issues/:key/move` — server-authoritative board reposition.
  * `beforeIssueId`/`afterIssueId` name the issue this one should land BEFORE
  * and AFTER respectively (both nullable/omittable — omit both to place at
@@ -102,6 +96,13 @@ export const moveIssueSchema = z.object({
 });
 export type MoveIssue = z.infer<typeof moveIssueSchema>;
 
+/**
+ * Query params for listing issues within a project (filters + cursor
+ * pagination). `q` is a real Postgres full-text search term (ADR-0006) —
+ * matched server-side via `websearch_to_tsquery` against title/description
+ * (stemming included, e.g. "running" matches "run"), not a `contains`
+ * substring match and not a query language (no JQL).
+ */
 export const issueListQuerySchema = z.object({
   status: issueStatusSchema.optional(),
   assigneeId: z.string().cuid().optional(),

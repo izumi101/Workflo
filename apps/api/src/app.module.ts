@@ -13,6 +13,7 @@ import { IssuesModule } from "./issues/issues.module.js";
 import { LabelsModule } from "./labels/labels.module.js";
 import { CommentsModule } from "./comments/comments.module.js";
 import { RealtimeModule } from "./realtime/realtime.module.js";
+import { SearchModule } from "./search/search.module.js";
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { RealtimeModule } from "./realtime/realtime.module.js";
     LabelsModule,
     CommentsModule,
     RealtimeModule,
+    SearchModule,
   ],
   providers: [
     {

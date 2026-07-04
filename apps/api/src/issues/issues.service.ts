@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { Prisma } from "@prisma/client";
 import {
   rankBetween,
   REALTIME_EVENTS,
@@ -11,6 +12,7 @@ import {
 } from "@workflo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { parseIssueKey } from "../common/issue-key.js";
+import { issueFtsMatch } from "../common/fts.js";
 
 type IssueRow = {
   id: string;
@@ -112,20 +114,31 @@ export class IssuesService {
     return dto;
   }
 
+  /**
+   * Lists issues in `projectId`, optionally narrowed by status/assignee/label
+   * and by `q` — a real Postgres full-text search (ADR-0006), not a `contains`
+   * placeholder. When `q` is present, a raw `$queryRaw` first resolves the
+   * matching issue ids via the FTS predicate (see `issueFtsMatch`, which
+   * matches the functional GIN index `Issue_fts_idx`), then feeds that id set
+   * into the existing Prisma `where` so status/assigneeId/labelId + cursor
+   * pagination + `[status, rank]` ordering all keep working unchanged. Empty
+   * `q` skips FTS entirely (unchanged behavior from before ADR-0006 landed).
+   */
   async listByProject(projectId: string, query: IssueListQuery): Promise<IssueListResult> {
+    const matchingIds = query.q ? await this.findMatchingIssueIds(projectId, query.q) : null;
+
+    // FTS narrowed to zero matches -> short-circuit to an empty page instead
+    // of asking Prisma for `id IN ()` (works either way, but this is clearer).
+    if (matchingIds && matchingIds.length === 0) {
+      return { items: [], nextCursor: null };
+    }
+
     const where = {
       projectId,
       ...(query.status ? { status: query.status } : {}),
       ...(query.assigneeId ? { assigneeId: query.assigneeId } : {}),
       ...(query.labelId ? { labels: { some: { id: query.labelId } } } : {}),
-      ...(query.q
-        ? {
-            OR: [
-              { title: { contains: query.q, mode: "insensitive" as const } },
-              { description: { contains: query.q, mode: "insensitive" as const } },
-            ],
-          }
-        : {}),
+      ...(matchingIds ? { id: { in: matchingIds } } : {}),
     };
 
     const rows = await this.prisma.issue.findMany({
@@ -141,6 +154,23 @@ export class IssuesService {
     const nextCursor = hasMore ? items[items.length - 1]!.id : null;
 
     return { items: items.map(toIssue), nextCursor };
+  }
+
+  /**
+   * Resolves the ids of issues in `projectId` whose title/description match
+   * `q` via Postgres FTS (`websearch_to_tsquery`, tolerates arbitrary input —
+   * never throws). Parameterized via `Prisma.sql`; `q` is never
+   * string-concatenated into the query.
+   */
+  private async findMatchingIssueIds(projectId: string, q: string): Promise<string[]> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>(
+      Prisma.sql`
+        SELECT "id" FROM "Issue"
+        WHERE "projectId" = ${projectId}
+          AND ${issueFtsMatch(q)}
+      `,
+    );
+    return rows.map((r) => r.id);
   }
 
   /** Looks up an issue by its human-readable key ("WF-123"). 404s if the project or issue doesn't exist. */
