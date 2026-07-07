@@ -1,12 +1,15 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 import { CommentsService } from "./comments.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { NOTIFICATIONS_QUEUE } from "../notifications/notification-job.js";
 
 describe("CommentsService", () => {
   let service: CommentsService;
   let eventsMock: { emit: jest.Mock };
+  let queueMock: { add: jest.Mock };
 
   const prismaMock = {
     issue: { findFirst: jest.fn() },
@@ -35,12 +38,14 @@ describe("CommentsService", () => {
   beforeEach(async () => {
     jest.resetAllMocks();
     eventsMock = { emit: jest.fn() };
+    queueMock = { add: jest.fn() };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         CommentsService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: EventEmitter2, useValue: eventsMock },
+        { provide: getQueueToken(NOTIFICATIONS_QUEUE), useValue: queueMock },
       ],
     }).compile();
 
@@ -153,6 +158,82 @@ describe("CommentsService", () => {
     });
   });
 
+  describe("create — mention notification enqueue", () => {
+    it("enqueues a mention job for each mentioned user except the author", async () => {
+      prismaMock.issue.findFirst.mockResolvedValue({
+        id: "issue_1",
+        projectId: "proj_1",
+        project: { workspaceId: "ws_1" },
+      });
+      prismaMock.workspaceMember.findMany.mockResolvedValue([
+        { userId: "user_author" },
+        { userId: "user_b" },
+        { userId: "user_c" },
+      ]);
+      prismaMock.comment.create.mockImplementation(({ data }: any) =>
+        Promise.resolve(baseCommentRow({ id: "comment_1", body: data.body, mentions: data.mentions })),
+      );
+
+      await service.create("WF-1", "ws_1", "user_author", {
+        body: "Hi @author @b @c",
+        mentionUserIds: ["user_author", "user_b", "user_c"],
+      });
+
+      expect(queueMock.add).toHaveBeenCalledTimes(2);
+      expect(queueMock.add).toHaveBeenCalledWith(
+        "mention",
+        expect.objectContaining({
+          userId: "user_b",
+          type: "MENTION",
+          actorId: "user_author",
+          issueKey: "WF-1",
+          projectId: "proj_1",
+          commentId: "comment_1",
+        }),
+      );
+      expect(queueMock.add).toHaveBeenCalledWith(
+        "mention",
+        expect.objectContaining({ userId: "user_c", type: "MENTION" }),
+      );
+      expect(queueMock.add).not.toHaveBeenCalledWith(
+        "mention",
+        expect.objectContaining({ userId: "user_author" }),
+      );
+    });
+
+    it("enqueues nothing on a self-mention-only comment", async () => {
+      prismaMock.issue.findFirst.mockResolvedValue({
+        id: "issue_1",
+        projectId: "proj_1",
+        project: { workspaceId: "ws_1" },
+      });
+      prismaMock.workspaceMember.findMany.mockResolvedValue([{ userId: "user_author" }]);
+      prismaMock.comment.create.mockResolvedValue(
+        baseCommentRow({ mentions: ["user_author"] }),
+      );
+
+      await service.create("WF-1", "ws_1", "user_author", {
+        body: "Note to self",
+        mentionUserIds: ["user_author"],
+      });
+
+      expect(queueMock.add).not.toHaveBeenCalled();
+    });
+
+    it("enqueues nothing when there are no mentions", async () => {
+      prismaMock.issue.findFirst.mockResolvedValue({
+        id: "issue_1",
+        projectId: "proj_1",
+        project: { workspaceId: "ws_1" },
+      });
+      prismaMock.comment.create.mockResolvedValue(baseCommentRow());
+
+      await service.create("WF-1", "ws_1", "user_author", { body: "No mentions here" });
+
+      expect(queueMock.add).not.toHaveBeenCalled();
+    });
+  });
+
   describe("update — author-only edit", () => {
     it("allows the author to edit their own comment", async () => {
       prismaMock.comment.findUnique.mockResolvedValue({
@@ -188,6 +269,7 @@ describe("CommentsService", () => {
     it("re-validates and replaces mentions when mentionUserIds is provided", async () => {
       prismaMock.comment.findUnique.mockResolvedValue({
         authorId: "user_author",
+        mentions: [],
         issue: { number: 1, project: { key: "WF", id: "proj_1", workspaceId: "ws_1" } },
       });
       prismaMock.workspaceMember.findMany.mockResolvedValue([{ userId: "user_b" }]);
@@ -204,11 +286,59 @@ describe("CommentsService", () => {
         expect.objectContaining({ data: { body: "Edited", mentions: ["user_b"] } }),
       );
       expect(result.mentions).toEqual(["user_b"]);
+      // user_b is newly added (wasn't in the prior empty mentions) -> notified.
+      expect(queueMock.add).toHaveBeenCalledWith(
+        "mention",
+        expect.objectContaining({ userId: "user_b", type: "MENTION", actorId: "user_author" }),
+      );
+    });
+
+    it("does NOT re-enqueue a mention job for someone already mentioned before the edit", async () => {
+      prismaMock.comment.findUnique.mockResolvedValue({
+        authorId: "user_author",
+        mentions: ["user_b"],
+        issue: { number: 1, project: { key: "WF", id: "proj_1", workspaceId: "ws_1" } },
+      });
+      prismaMock.workspaceMember.findMany.mockResolvedValue([{ userId: "user_b" }]);
+      prismaMock.comment.update.mockImplementation(({ data }: any) =>
+        Promise.resolve(baseCommentRow({ mentions: data.mentions })),
+      );
+
+      await service.update("comment_1", "user_author", {
+        body: "Edited again",
+        mentionUserIds: ["user_b"],
+      });
+
+      expect(queueMock.add).not.toHaveBeenCalled();
+    });
+
+    it("enqueues only the NEWLY added mention when editing to add a second mention", async () => {
+      prismaMock.comment.findUnique.mockResolvedValue({
+        authorId: "user_author",
+        mentions: ["user_b"],
+        issue: { number: 1, project: { key: "WF", id: "proj_1", workspaceId: "ws_1" } },
+      });
+      prismaMock.workspaceMember.findMany.mockResolvedValue([{ userId: "user_b" }, { userId: "user_c" }]);
+      prismaMock.comment.update.mockImplementation(({ data }: any) =>
+        Promise.resolve(baseCommentRow({ mentions: data.mentions })),
+      );
+
+      await service.update("comment_1", "user_author", {
+        body: "Edited to add user_c",
+        mentionUserIds: ["user_b", "user_c"],
+      });
+
+      expect(queueMock.add).toHaveBeenCalledTimes(1);
+      expect(queueMock.add).toHaveBeenCalledWith(
+        "mention",
+        expect.objectContaining({ userId: "user_c", type: "MENTION" }),
+      );
     });
 
     it("leaves existing mentions untouched when mentionUserIds is not provided", async () => {
       prismaMock.comment.findUnique.mockResolvedValue({
         authorId: "user_author",
+        mentions: ["user_b"],
         issue: { number: 1, project: { key: "WF", id: "proj_1", workspaceId: "ws_1" } },
       });
       prismaMock.comment.update.mockResolvedValue(baseCommentRow({ body: "Edited", mentions: ["user_b"] }));
@@ -219,6 +349,7 @@ describe("CommentsService", () => {
       expect(prismaMock.comment.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: { body: "Edited" } }),
       );
+      expect(queueMock.add).not.toHaveBeenCalled();
     });
 
     it("404s when the comment doesn't exist", async () => {

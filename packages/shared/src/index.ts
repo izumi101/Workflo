@@ -5,5 +5,6 @@ export * from "./auth.js";
 export * from "./workspace.js";
 export * from "./rank.js";
 export * from "./comment.js";
+export * from "./notification.js";
 export * from "./realtime.js";
 export * from "./search.js";

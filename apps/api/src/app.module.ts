@@ -14,6 +14,7 @@ import { LabelsModule } from "./labels/labels.module.js";
 import { CommentsModule } from "./comments/comments.module.js";
 import { RealtimeModule } from "./realtime/realtime.module.js";
 import { SearchModule } from "./search/search.module.js";
+import { NotificationsModule } from "./notifications/notifications.module.js";
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { SearchModule } from "./search/search.module.js";
     CommentsModule,
     RealtimeModule,
     SearchModule,
+    NotificationsModule,
   ],
   providers: [
     {
