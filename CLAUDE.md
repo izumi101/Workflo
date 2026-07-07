@@ -48,6 +48,8 @@ Route by **task ambiguity + blast radius**, not a fixed "the big model always pl
 
 Code + tests are always written by **Sonnet 5** (dispatch via the `Agent` tool with `model: "sonnet"`), never directly on Opus.
 
+**UX/UI design is ALWAYS Fable 5 (user rule, 2026-07-04):** any user-facing interface step — page/screen layout, component design, interaction/keyboard behaviour, visual/UX decisions — is **designed on Fable 5** and **implemented on Sonnet 5**, regardless of the ambiguity tier above. In Claude Code terms: dispatch a **Fable design sub-agent** (`model: "fable"`) to produce the UX/UI spec, then a **Sonnet sub-agent** to build it, then the Opus verification gate. This overrides "Sonnet plans clear UI steps itself" — UI *design* goes to Fable even when the UI looks trivial.
+
 **Foundation / architecture review:** default to a **fresh Opus adversarial pass** ("where does this break at scale? what's the weakest assumption?") — cheap, catches ~90%. Escalate a review to **Fable** only when the foundation is genuinely non-standard AND everything else will sit on top of it — one pass, before committing.
 
 **Verification gate (never skipped):** whoever wrote the code, the orchestrator (Opus) verifies with a real run (build / typecheck / tests) before commit. Autonomy scales the *planning depth*, not the right to skip verification — Sonnet-alone has produced false "done" reports and missed a real bug here, so a tight self-contained brief + an Opus check stays mandatory.
