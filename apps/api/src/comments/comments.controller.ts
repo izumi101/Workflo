@@ -28,9 +28,10 @@ export class CommentsController {
   @ResolveWorkspaceFrom("issue:key")
   async list(
     @Param("key") key: string,
+    @WorkspaceContext() workspaceContext: WorkspaceContextType,
     @Query(new ZodQueryValidationPipe(commentListQuerySchema)) query: CommentListQuery,
   ): Promise<CommentListResult> {
-    return this.commentsService.listByIssueKey(key, query);
+    return this.commentsService.listByIssueKey(key, workspaceContext.workspaceId, query);
   }
 
   @Post("issues/:key/comments")
@@ -38,10 +39,11 @@ export class CommentsController {
   @ResolveWorkspaceFrom("issue:key")
   async create(
     @Param("key") key: string,
+    @WorkspaceContext() workspaceContext: WorkspaceContextType,
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(createCommentSchema)) body: CreateComment,
   ): Promise<CommentWithAuthor> {
-    return this.commentsService.create(key, user.id, body);
+    return this.commentsService.create(key, workspaceContext.workspaceId, user.id, body);
   }
 
   @Patch("comments/:id")

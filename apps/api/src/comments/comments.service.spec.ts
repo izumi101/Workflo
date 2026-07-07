@@ -56,7 +56,7 @@ describe("CommentsService", () => {
       });
       prismaMock.comment.create.mockResolvedValue(baseCommentRow());
 
-      const result = await service.create("WF-1", "user_author", { body: "Hello world" });
+      const result = await service.create("WF-1", "ws_1", "user_author", { body: "Hello world" });
 
       expect(prismaMock.workspaceMember.findMany).not.toHaveBeenCalled();
       expect(prismaMock.comment.create).toHaveBeenCalledWith(
@@ -79,7 +79,7 @@ describe("CommentsService", () => {
         Promise.resolve(baseCommentRow({ mentions: data.mentions })),
       );
 
-      const result = await service.create("WF-1", "user_author", {
+      const result = await service.create("WF-1", "ws_1", "user_author", {
         body: "Hi @b @c",
         mentionUserIds: ["user_b", "user_c"],
       });
@@ -106,7 +106,7 @@ describe("CommentsService", () => {
         Promise.resolve(baseCommentRow({ mentions: data.mentions })),
       );
 
-      const result = await service.create("WF-1", "user_author", {
+      const result = await service.create("WF-1", "ws_1", "user_author", {
         body: "Hi @b",
         mentionUserIds: ["user_b", "user_b", "user_b"],
       });
@@ -126,7 +126,7 @@ describe("CommentsService", () => {
       prismaMock.workspaceMember.findMany.mockResolvedValue([{ userId: "user_b" }]);
 
       await expect(
-        service.create("WF-1", "user_author", {
+        service.create("WF-1", "ws_1", "user_author", {
           body: "Hi @outsider",
           mentionUserIds: ["user_b", "user_outsider"],
         }),
@@ -134,7 +134,7 @@ describe("CommentsService", () => {
       expect(prismaMock.comment.create).not.toHaveBeenCalled();
 
       try {
-        await service.create("WF-1", "user_author", {
+        await service.create("WF-1", "ws_1", "user_author", {
           body: "Hi @outsider",
           mentionUserIds: ["user_b", "user_outsider"],
         });
@@ -145,11 +145,11 @@ describe("CommentsService", () => {
       }
     });
 
-    it("404s when the issue key doesn't resolve", async () => {
+    it("404s when the issue key doesn't resolve in the given workspace", async () => {
       prismaMock.issue.findFirst.mockResolvedValue(null);
-      await expect(service.create("WF-999", "user_author", { body: "x" })).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.create("WF-999", "ws_1", "user_author", { body: "x" }),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -289,8 +289,11 @@ describe("CommentsService", () => {
       ];
       prismaMock.comment.findMany.mockResolvedValue(rows);
 
-      const result = await service.listByIssueKey("WF-1", { limit: 2 });
+      const result = await service.listByIssueKey("WF-1", "ws_1", { limit: 2 });
 
+      expect(prismaMock.issue.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { number: 1, project: { key: "WF", workspaceId: "ws_1" } } }),
+      );
       expect(prismaMock.comment.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { issueId: "issue_1" }, orderBy: { createdAt: "asc" }, take: 3 }),
       );
@@ -299,11 +302,11 @@ describe("CommentsService", () => {
       expect(result.nextCursor).toBe("c2");
     });
 
-    it("404s when the issue key doesn't resolve", async () => {
+    it("404s when the issue key doesn't resolve in the given workspace", async () => {
       prismaMock.issue.findFirst.mockResolvedValue(null);
-      await expect(service.listByIssueKey("WF-999", { limit: 50 })).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.listByIssueKey("WF-999", "ws_1", { limit: 50 }),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

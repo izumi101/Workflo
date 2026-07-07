@@ -161,24 +161,24 @@ describe("IssuesService", () => {
   });
 
   describe("getByKey — key parsing", () => {
-    it("parses a well-formed key and looks up by project key + number", async () => {
+    it("parses a well-formed key and looks up by project key + number, scoped to workspaceId", async () => {
       prismaMock.issue.findFirst.mockResolvedValue(baseIssueRow());
 
-      const result = await service.getByKey("WF-1");
+      const result = await service.getByKey("WF-1", "ws_1");
 
       expect(prismaMock.issue.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { number: 1, project: { key: "WF" } } }),
+        expect.objectContaining({ where: { number: 1, project: { key: "WF", workspaceId: "ws_1" } } }),
       );
       expect(result.number).toBe(1);
     });
 
     it("throws 400 on a malformed key", async () => {
-      await expect(service.getByKey("not-a-key")).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.getByKey("not-a-key", "ws_1")).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it("throws 404 when no issue matches", async () => {
+    it("throws 404 when no issue matches in the given workspace", async () => {
       prismaMock.issue.findFirst.mockResolvedValue(null);
-      await expect(service.getByKey("WF-999")).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.getByKey("WF-999", "ws_1")).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -263,18 +263,21 @@ describe("IssuesService", () => {
   describe("update", () => {
     it("throws 404 when the issue key doesn't resolve", async () => {
       prismaMock.issue.findFirst.mockResolvedValue(null);
-      await expect(service.update("WF-1", { title: "New" } as any)).rejects.toBeInstanceOf(
+      await expect(service.update("WF-1", "ws_1", { title: "New" } as any)).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
 
-    it("applies a partial update and validates cross-project refs", async () => {
+    it("applies a partial update and validates cross-project refs, scoping the lookup to workspaceId", async () => {
       prismaMock.issue.findFirst.mockResolvedValueOnce({ id: "issue_1", projectId: "proj_1" }); // findRowByKey
       prismaMock.project.findUnique.mockResolvedValue({ workspaceId: "ws_1" });
       prismaMock.issue.update.mockResolvedValue(baseIssueRow({ status: "IN_PROGRESS" }));
 
-      const result = await service.update("WF-1", { status: "IN_PROGRESS" } as any);
+      const result = await service.update("WF-1", "ws_1", { status: "IN_PROGRESS" } as any);
 
+      expect(prismaMock.issue.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { number: 1, project: { key: "WF", workspaceId: "ws_1" } } }),
+      );
       expect(prismaMock.issue.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: "issue_1" },
@@ -295,7 +298,7 @@ describe("IssuesService", () => {
         Promise.resolve(baseIssueRow({ id: "issue_2", status: data.status, rank: data.rank })),
       );
 
-      const result = await service.move("WF-2", {
+      const result = await service.move("WF-2", "ws_1", {
         status: "TODO",
         beforeIssueId: "before_1",
         afterIssueId: "after_1",
@@ -317,7 +320,7 @@ describe("IssuesService", () => {
         Promise.resolve(baseIssueRow({ id: "issue_1", status: data.status, rank: data.rank })),
       );
 
-      await service.move("WF-1", { status: "DONE" } as any);
+      await service.move("WF-1", "ws_1", { status: "DONE" } as any);
 
       expect(prismaMock.issue.findUnique).not.toHaveBeenCalled();
       const updateCall = prismaMock.issue.update.mock.calls[0][0];
@@ -335,7 +338,7 @@ describe("IssuesService", () => {
       });
 
       await expect(
-        service.move("WF-1", { status: "TODO", beforeIssueId: "other_proj_issue" } as any),
+        service.move("WF-1", "ws_1", { status: "TODO", beforeIssueId: "other_proj_issue" } as any),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prismaMock.issue.update).not.toHaveBeenCalled();
     });
@@ -350,7 +353,7 @@ describe("IssuesService", () => {
       });
 
       await expect(
-        service.move("WF-1", { status: "TODO", beforeIssueId: "wrong_status_issue" } as any),
+        service.move("WF-1", "ws_1", { status: "TODO", beforeIssueId: "wrong_status_issue" } as any),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prismaMock.issue.update).not.toHaveBeenCalled();
     });
@@ -360,26 +363,29 @@ describe("IssuesService", () => {
       prismaMock.issue.findUnique.mockResolvedValueOnce(null);
 
       await expect(
-        service.move("WF-1", { status: "TODO", afterIssueId: "ghost" } as any),
+        service.move("WF-1", "ws_1", { status: "TODO", afterIssueId: "ghost" } as any),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it("throws 404 when the moved issue's key doesn't resolve", async () => {
       prismaMock.issue.findFirst.mockResolvedValueOnce(null);
 
-      await expect(service.move("WF-999", { status: "TODO" } as any)).rejects.toBeInstanceOf(
+      await expect(service.move("WF-999", "ws_1", { status: "TODO" } as any)).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
   });
 
   describe("remove", () => {
-    it("deletes the issue resolved by key", async () => {
+    it("deletes the issue resolved by key, scoped to workspaceId", async () => {
       prismaMock.issue.findFirst.mockResolvedValue({ id: "issue_1", projectId: "proj_1" });
       prismaMock.issue.delete.mockResolvedValue({});
 
-      await service.remove("WF-1");
+      await service.remove("WF-1", "ws_1");
 
+      expect(prismaMock.issue.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { number: 1, project: { key: "WF", workspaceId: "ws_1" } } }),
+      );
       expect(prismaMock.issue.delete).toHaveBeenCalledWith({ where: { id: "issue_1" } });
       expect(eventsMock.emit).toHaveBeenCalledWith("issue.deleted", {
         projectId: "proj_1",
@@ -387,9 +393,9 @@ describe("IssuesService", () => {
       });
     });
 
-    it("throws 404 when the issue doesn't exist", async () => {
+    it("throws 404 when the issue doesn't exist in the given workspace", async () => {
       prismaMock.issue.findFirst.mockResolvedValue(null);
-      await expect(service.remove("WF-999")).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.remove("WF-999", "ws_1")).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

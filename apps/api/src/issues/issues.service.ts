@@ -173,11 +173,19 @@ export class IssuesService {
     return rows.map((r) => r.id);
   }
 
-  /** Looks up an issue by its human-readable key ("WF-123"). 404s if the project or issue doesn't exist. */
-  async getByKey(key: string): Promise<Issue> {
+  /**
+   * Looks up an issue by its human-readable key ("WF-123"), scoped to
+   * `workspaceId` — the workspace WorkspaceMemberGuard already authorized the
+   * caller against for this exact key (see the "issue:key" strategy in
+   * workspace-member.guard.ts). Project.key is only unique WITHIN a
+   * workspace, so without this scope a colliding key in another workspace
+   * could be returned instead. 404s if no issue matches within that
+   * workspace.
+   */
+  async getByKey(key: string, workspaceId: string): Promise<Issue> {
     const { projectKey, number } = parseIssueKey(key);
     const issue = await this.prisma.issue.findFirst({
-      where: { number, project: { key: projectKey } },
+      where: { number, project: { key: projectKey, workspaceId } },
       include: ISSUE_INCLUDE,
     });
     if (!issue) {
@@ -186,8 +194,8 @@ export class IssuesService {
     return toIssue(issue);
   }
 
-  async update(key: string, input: UpdateIssue): Promise<Issue> {
-    const existing = await this.findRowByKey(key);
+  async update(key: string, workspaceId: string, input: UpdateIssue): Promise<Issue> {
+    const existing = await this.findRowByKey(key, workspaceId);
     await this.assertRefsBelongToProject(existing.projectId, input);
 
     const issue = await this.prisma.issue.update({
@@ -229,8 +237,8 @@ export class IssuesService {
    * `[projectId, status]` right here — no change needed to this method's
    * external contract (see rankBetween's doc comment in packages/shared).
    */
-  async move(key: string, input: MoveIssue): Promise<Issue> {
-    const existing = await this.findRowByKey(key);
+  async move(key: string, workspaceId: string, input: MoveIssue): Promise<Issue> {
+    const existing = await this.findRowByKey(key, workspaceId);
 
     const [beforeIssue, afterIssue] = await Promise.all([
       input.beforeIssueId ? this.findNeighbor(input.beforeIssueId) : Promise.resolve(null),
@@ -273,8 +281,8 @@ export class IssuesService {
     return neighbor;
   }
 
-  async remove(key: string): Promise<void> {
-    const existing = await this.findRowByKey(key);
+  async remove(key: string, workspaceId: string): Promise<void> {
+    const existing = await this.findRowByKey(key, workspaceId);
     await this.prisma.issue.delete({ where: { id: existing.id } });
     this.events.emit(REALTIME_EVENTS.ISSUE_DELETED, {
       projectId: existing.projectId,
@@ -282,10 +290,22 @@ export class IssuesService {
     });
   }
 
-  private async findRowByKey(key: string): Promise<{ id: string; projectId: string }> {
+  /**
+   * Resolves the human key to its row id/projectId, scoped to `workspaceId`
+   * (the workspace the caller was already authorized against for this exact
+   * key by WorkspaceMemberGuard's "issue:key" strategy). This ensures
+   * update/move/remove operate on the SAME issue the guard authorized,
+   * closing the gap where the guard could authorize the caller's own
+   * same-keyed issue while the service resolved a different (foreign)
+   * workspace's colliding key.
+   */
+  private async findRowByKey(
+    key: string,
+    workspaceId: string,
+  ): Promise<{ id: string; projectId: string }> {
     const { projectKey, number } = parseIssueKey(key);
     const issue = await this.prisma.issue.findFirst({
-      where: { number, project: { key: projectKey } },
+      where: { number, project: { key: projectKey, workspaceId } },
       select: { id: true, projectId: true },
     });
     if (!issue) {

@@ -17,6 +17,8 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { ZodValidationPipe, ZodQueryValidationPipe } from "../auth/zod-validation.pipe.js";
 import { WorkspaceMemberGuard } from "../authz/guards/workspace-member.guard.js";
 import { ResolveWorkspaceFrom } from "../authz/decorators/resolve-workspace-from.decorator.js";
+import { WorkspaceContext } from "../authz/decorators/workspace-context.decorator.js";
+import type { WorkspaceContext as WorkspaceContextType } from "../authz/workspace-context.js";
 
 @Controller()
 @UseGuards(JwtAuthGuard)
@@ -47,8 +49,11 @@ export class IssuesController {
   @Get("issues/:key")
   @UseGuards(WorkspaceMemberGuard)
   @ResolveWorkspaceFrom("issue:key")
-  async getByKey(@Param("key") key: string): Promise<Issue> {
-    return this.issuesService.getByKey(key);
+  async getByKey(
+    @Param("key") key: string,
+    @WorkspaceContext() workspaceContext: WorkspaceContextType,
+  ): Promise<Issue> {
+    return this.issuesService.getByKey(key, workspaceContext.workspaceId);
   }
 
   @Patch("issues/:key")
@@ -56,9 +61,10 @@ export class IssuesController {
   @ResolveWorkspaceFrom("issue:key")
   async update(
     @Param("key") key: string,
+    @WorkspaceContext() workspaceContext: WorkspaceContextType,
     @Body(new ZodValidationPipe(updateIssueSchema)) body: UpdateIssue,
   ): Promise<Issue> {
-    return this.issuesService.update(key, body);
+    return this.issuesService.update(key, workspaceContext.workspaceId, body);
   }
 
   @Post("issues/:key/move")
@@ -66,16 +72,20 @@ export class IssuesController {
   @ResolveWorkspaceFrom("issue:key")
   async move(
     @Param("key") key: string,
+    @WorkspaceContext() workspaceContext: WorkspaceContextType,
     @Body(new ZodValidationPipe(moveIssueSchema)) body: MoveIssue,
   ): Promise<Issue> {
-    return this.issuesService.move(key, body);
+    return this.issuesService.move(key, workspaceContext.workspaceId, body);
   }
 
   @Delete("issues/:key")
   @UseGuards(WorkspaceMemberGuard)
   @ResolveWorkspaceFrom("issue:key")
-  async remove(@Param("key") key: string): Promise<{ success: true }> {
-    await this.issuesService.remove(key);
+  async remove(
+    @Param("key") key: string,
+    @WorkspaceContext() workspaceContext: WorkspaceContextType,
+  ): Promise<{ success: true }> {
+    await this.issuesService.remove(key, workspaceContext.workspaceId);
     return { success: true };
   }
 }
