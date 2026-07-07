@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { issueSchema } from "./issue.js";
 import { commentSchema } from "./comment.js";
+import { notificationSchema } from "./notification.js";
 
 /**
  * Real-time event names shared between the API (emitter) and web client
@@ -16,6 +17,7 @@ export const REALTIME_EVENTS = {
   COMMENT_UPDATED: "comment.updated",
   COMMENT_DELETED: "comment.deleted",
   PRESENCE_UPDATE: "presence.update",
+  NOTIFICATION_CREATED: "notification.created",
 } as const;
 
 export type RealtimeEvent = (typeof REALTIME_EVENTS)[keyof typeof REALTIME_EVENTS];
@@ -64,7 +66,22 @@ export const presenceUpdatePayloadSchema = z.object({
 });
 export type PresenceUpdatePayload = z.infer<typeof presenceUpdatePayloadSchema>;
 
+/**
+ * Wire shape for `notification.created` — EXACTLY the created Notification
+ * row, no wrapper/envelope (same "payload = what's emitted" discipline as
+ * comment.added). Broadcast to the user-specific room (`user:{userId}`, see
+ * `userRoom`), not a project room — this is the one realtime event that is
+ * NOT project-scoped.
+ */
+export const notificationCreatedEventPayloadSchema = notificationSchema;
+export type NotificationCreatedEventPayload = z.infer<typeof notificationCreatedEventPayloadSchema>;
+
 /** Room name helper — keep the naming convention (`project:{id}`) in one place. */
 export function projectRoom(projectId: string): string {
   return `project:${projectId}`;
+}
+
+/** Per-user room so notification.created can be pushed to exactly one user's connected sockets. */
+export function userRoom(userId: string): string {
+  return `user:${userId}`;
 }

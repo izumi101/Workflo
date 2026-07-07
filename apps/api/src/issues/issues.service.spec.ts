@@ -1,12 +1,15 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 import { IssuesService } from "./issues.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { NOTIFICATIONS_QUEUE } from "../notifications/notification-job.js";
 
 describe("IssuesService", () => {
   let service: IssuesService;
   let eventsMock: { emit: jest.Mock };
+  let queueMock: { add: jest.Mock };
 
   const txMock = {
     project: { update: jest.fn() },
@@ -52,12 +55,14 @@ describe("IssuesService", () => {
     jest.resetAllMocks();
     prismaMock.$transaction.mockImplementation((cb: (tx: typeof txMock) => unknown) => cb(txMock));
     eventsMock = { emit: jest.fn() };
+    queueMock = { add: jest.fn() };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         IssuesService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: EventEmitter2, useValue: eventsMock },
+        { provide: getQueueToken(NOTIFICATIONS_QUEUE), useValue: queueMock },
       ],
     }).compile();
 
@@ -263,17 +268,21 @@ describe("IssuesService", () => {
   describe("update", () => {
     it("throws 404 when the issue key doesn't resolve", async () => {
       prismaMock.issue.findFirst.mockResolvedValue(null);
-      await expect(service.update("WF-1", "ws_1", { title: "New" } as any)).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.update("WF-1", "ws_1", "user_actor", { title: "New" } as any),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it("applies a partial update and validates cross-project refs, scoping the lookup to workspaceId", async () => {
-      prismaMock.issue.findFirst.mockResolvedValueOnce({ id: "issue_1", projectId: "proj_1" }); // findRowByKey
+      prismaMock.issue.findFirst.mockResolvedValueOnce({
+        id: "issue_1",
+        projectId: "proj_1",
+        assigneeId: null,
+      }); // findRowByKey
       prismaMock.project.findUnique.mockResolvedValue({ workspaceId: "ws_1" });
       prismaMock.issue.update.mockResolvedValue(baseIssueRow({ status: "IN_PROGRESS" }));
 
-      const result = await service.update("WF-1", "ws_1", { status: "IN_PROGRESS" } as any);
+      const result = await service.update("WF-1", "ws_1", "user_actor", { status: "IN_PROGRESS" } as any);
 
       expect(prismaMock.issue.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({ where: { number: 1, project: { key: "WF", workspaceId: "ws_1" } } }),
@@ -285,6 +294,137 @@ describe("IssuesService", () => {
         }),
       );
       expect(result.status).toBe("IN_PROGRESS");
+      expect(queueMock.add).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("create — assign notification", () => {
+    it("enqueues an assign job when created with a non-self assignee", async () => {
+      prismaMock.project.findUnique
+        .mockResolvedValueOnce({ workspaceId: "ws_1" }) // assertRefsBelongToProject
+        .mockResolvedValueOnce({ key: "WF" }); // enqueueAssignJob's issueKey lookup
+      prismaMock.workspaceMember.findUnique.mockResolvedValue({ userId: "user_assignee" });
+      txMock.project.update.mockResolvedValueOnce({ counter: 1 });
+      txMock.issue.findFirst.mockResolvedValueOnce(null);
+      txMock.issue.create.mockResolvedValueOnce(
+        baseIssueRow({ number: 1, assigneeId: "user_assignee" }),
+      );
+
+      await service.create("proj_1", "user_reporter", {
+        title: "Assigned issue",
+        assigneeId: "user_assignee",
+      } as any);
+
+      expect(queueMock.add).toHaveBeenCalledWith(
+        "assigned",
+        expect.objectContaining({
+          userId: "user_assignee",
+          type: "ASSIGNED",
+          actorId: "user_reporter",
+          issueKey: "WF-1",
+          projectId: "proj_1",
+        }),
+      );
+    });
+
+    it("does NOT enqueue an assign job on self-assignment at create time", async () => {
+      prismaMock.project.findUnique.mockResolvedValue({ workspaceId: "ws_1" });
+      prismaMock.workspaceMember.findUnique.mockResolvedValue({ userId: "user_reporter" });
+      txMock.project.update.mockResolvedValueOnce({ counter: 1 });
+      txMock.issue.findFirst.mockResolvedValueOnce(null);
+      txMock.issue.create.mockResolvedValueOnce(
+        baseIssueRow({ number: 1, assigneeId: "user_reporter" }),
+      );
+
+      await service.create("proj_1", "user_reporter", {
+        title: "Self assigned",
+        assigneeId: "user_reporter",
+      } as any);
+
+      expect(queueMock.add).not.toHaveBeenCalled();
+    });
+
+    it("does not enqueue anything when no assigneeId is set", async () => {
+      prismaMock.project.findUnique.mockResolvedValue({ workspaceId: "ws_1" });
+      txMock.project.update.mockResolvedValueOnce({ counter: 1 });
+      txMock.issue.findFirst.mockResolvedValueOnce(null);
+      txMock.issue.create.mockResolvedValueOnce(baseIssueRow({ number: 1 }));
+
+      await service.create("proj_1", "user_reporter", { title: "Unassigned" } as any);
+
+      expect(queueMock.add).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("update — assign notification", () => {
+    it("enqueues an assign job when assigneeId CHANGES to a new non-null non-self value", async () => {
+      prismaMock.issue.findFirst.mockResolvedValueOnce({
+        id: "issue_1",
+        projectId: "proj_1",
+        assigneeId: "user_old",
+      }); // findRowByKey
+      prismaMock.project.findUnique
+        .mockResolvedValueOnce({ workspaceId: "ws_1" }) // assertRefsBelongToProject
+        .mockResolvedValueOnce({ key: "WF" }); // enqueueAssignJob's issueKey lookup
+      prismaMock.workspaceMember.findUnique.mockResolvedValue({ userId: "user_new" });
+      prismaMock.issue.update.mockResolvedValue(baseIssueRow({ assigneeId: "user_new" }));
+
+      await service.update("WF-1", "ws_1", "user_actor", { assigneeId: "user_new" } as any);
+
+      expect(queueMock.add).toHaveBeenCalledWith(
+        "assigned",
+        expect.objectContaining({
+          userId: "user_new",
+          type: "ASSIGNED",
+          actorId: "user_actor",
+          issueKey: "WF-1",
+          projectId: "proj_1",
+        }),
+      );
+    });
+
+    it("does NOT enqueue when assigneeId is unchanged", async () => {
+      prismaMock.issue.findFirst.mockResolvedValueOnce({
+        id: "issue_1",
+        projectId: "proj_1",
+        assigneeId: "user_same",
+      });
+      prismaMock.project.findUnique.mockResolvedValue({ workspaceId: "ws_1" });
+      prismaMock.workspaceMember.findUnique.mockResolvedValue({ userId: "user_same" });
+      prismaMock.issue.update.mockResolvedValue(baseIssueRow({ assigneeId: "user_same" }));
+
+      await service.update("WF-1", "ws_1", "user_actor", { assigneeId: "user_same" } as any);
+
+      expect(queueMock.add).not.toHaveBeenCalled();
+    });
+
+    it("does NOT enqueue when assigneeId is cleared to null", async () => {
+      prismaMock.issue.findFirst.mockResolvedValueOnce({
+        id: "issue_1",
+        projectId: "proj_1",
+        assigneeId: "user_old",
+      });
+      prismaMock.project.findUnique.mockResolvedValue({ workspaceId: "ws_1" });
+      prismaMock.issue.update.mockResolvedValue(baseIssueRow({ assigneeId: null }));
+
+      await service.update("WF-1", "ws_1", "user_actor", { assigneeId: null } as any);
+
+      expect(queueMock.add).not.toHaveBeenCalled();
+    });
+
+    it("does NOT enqueue on self-assignment via update", async () => {
+      prismaMock.issue.findFirst.mockResolvedValueOnce({
+        id: "issue_1",
+        projectId: "proj_1",
+        assigneeId: null,
+      });
+      prismaMock.project.findUnique.mockResolvedValue({ workspaceId: "ws_1" });
+      prismaMock.workspaceMember.findUnique.mockResolvedValue({ userId: "user_actor" });
+      prismaMock.issue.update.mockResolvedValue(baseIssueRow({ assigneeId: "user_actor" }));
+
+      await service.update("WF-1", "ws_1", "user_actor", { assigneeId: "user_actor" } as any);
+
+      expect(queueMock.add).not.toHaveBeenCalled();
     });
   });
 

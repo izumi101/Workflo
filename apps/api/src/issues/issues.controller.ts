@@ -62,9 +62,10 @@ export class IssuesController {
   async update(
     @Param("key") key: string,
     @WorkspaceContext() workspaceContext: WorkspaceContextType,
+    @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(updateIssueSchema)) body: UpdateIssue,
   ): Promise<Issue> {
-    return this.issuesService.update(key, workspaceContext.workspaceId, body);
+    return this.issuesService.update(key, workspaceContext.workspaceId, user.id, body);
   }
 
   @Post("issues/:key/move")

@@ -10,7 +10,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from "@nestjs/websockets";
-import { projectRoom, type PresenceUpdatePayload } from "@workflo/shared";
+import { projectRoom, userRoom, type PresenceUpdatePayload } from "@workflo/shared";
 import type { Server, Socket } from "socket.io";
 import type { EnvConfig } from "../config/env.validation.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -31,6 +31,10 @@ interface JoinLeaveProjectPayload {
  * of that project's workspace. `RealtimeListener` (packages this module
  * exports `server` to) is the only thing that broadcasts domain events into
  * these rooms.
+ *
+ * Every authenticated socket ALSO auto-joins its own `user:{id}` room on
+ * connect (no explicit opt-in needed, unlike `project:{id}`) — this is where
+ * `NotificationsProcessor` pushes `notification.created`.
  */
 @WebSocketGateway({
   cors: {
@@ -63,6 +67,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
       socket.data.userId = payload.sub;
       socket.data.email = payload.email;
+      // Every authenticated socket auto-joins its own user room so the
+      // notification worker can push notification.created live without the
+      // client having to opt in (unlike project rooms, which are membership-gated).
+      await socket.join(userRoom(payload.sub));
     } catch (err) {
       this.logger.warn(`Rejecting socket connection: ${(err as Error).message}`);
       socket.emit("error", { message: "Unauthorized" });

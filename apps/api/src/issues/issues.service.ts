@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { InjectQueue } from "@nestjs/bullmq";
+import type { Queue } from "bullmq";
 import { Prisma } from "@prisma/client";
 import {
   rankBetween,
@@ -13,6 +15,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service.js";
 import { parseIssueKey } from "../common/issue-key.js";
 import { issueFtsMatch } from "../common/fts.js";
+import { NOTIFICATIONS_QUEUE, NOTIFICATION_JOBS, type NotificationJobData } from "../notifications/notification-job.js";
 
 type IssueRow = {
   id: string;
@@ -66,13 +69,16 @@ export class IssuesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventEmitter2,
+    @InjectQueue(NOTIFICATIONS_QUEUE) private readonly notificationsQueue: Queue<NotificationJobData>,
   ) {}
 
   /**
    * Creates an issue in `projectId`. Allocates the human-readable `number`
    * atomically by incrementing `Project.counter` inside the same transaction
    * as the issue insert, so concurrent creates never collide or gap (see
-   * CLAUDE.md §8 "Human key allocation").
+   * CLAUDE.md §8 "Human key allocation"). If `assigneeId` is set (and isn't
+   * the reporter/actor themselves), enqueues an `assign` notification job
+   * AFTER the DB commit — no self-notify on self-assignment.
    */
   async create(projectId: string, reporterId: string, input: CreateIssue): Promise<Issue> {
     await this.assertRefsBelongToProject(projectId, input);
@@ -111,6 +117,11 @@ export class IssuesService {
 
     const dto = toIssue(issue);
     this.events.emit(REALTIME_EVENTS.ISSUE_CREATED, { projectId, issue: dto });
+
+    if (dto.assigneeId) {
+      await this.enqueueAssignJob(dto.assigneeId, reporterId, dto);
+    }
+
     return dto;
   }
 
@@ -194,7 +205,15 @@ export class IssuesService {
     return toIssue(issue);
   }
 
-  async update(key: string, workspaceId: string, input: UpdateIssue): Promise<Issue> {
+  /**
+   * Partial update. If `input.assigneeId` is provided and differs from the
+   * issue's PREVIOUS assigneeId (i.e. it actually changed) and the new value
+   * is non-null, enqueues an `assign` notification job for the new assignee
+   * AFTER the DB commit — excluding `actorId` (no self-notify on
+   * self-assignment). Clearing an assignee (`assigneeId: null`) or leaving it
+   * unchanged never enqueues anything.
+   */
+  async update(key: string, workspaceId: string, actorId: string, input: UpdateIssue): Promise<Issue> {
     const existing = await this.findRowByKey(key, workspaceId);
     await this.assertRefsBelongToProject(existing.projectId, input);
 
@@ -219,6 +238,13 @@ export class IssuesService {
 
     const dto = toIssue(issue);
     this.events.emit(REALTIME_EVENTS.ISSUE_UPDATED, { projectId: existing.projectId, issue: dto });
+
+    const assigneeChanged =
+      input.assigneeId !== undefined && input.assigneeId !== null && input.assigneeId !== existing.assigneeId;
+    if (assigneeChanged) {
+      await this.enqueueAssignJob(dto.assigneeId as string, actorId, dto);
+    }
+
     return dto;
   }
 
@@ -302,11 +328,11 @@ export class IssuesService {
   private async findRowByKey(
     key: string,
     workspaceId: string,
-  ): Promise<{ id: string; projectId: string }> {
+  ): Promise<{ id: string; projectId: string; assigneeId: string | null }> {
     const { projectKey, number } = parseIssueKey(key);
     const issue = await this.prisma.issue.findFirst({
       where: { number, project: { key: projectKey, workspaceId } },
-      select: { id: true, projectId: true },
+      select: { id: true, projectId: true, assigneeId: true },
     });
     if (!issue) {
       throw new NotFoundException("Issue not found");
@@ -354,5 +380,32 @@ export class IssuesService {
         throw new BadRequestException("labelIds must all belong to the same project");
       }
     }
+  }
+
+  /**
+   * Enqueues an `assign` notification job for `assigneeId`, excluding
+   * `actorId` (no self-notify on self-assignment). Resolves the issue's
+   * human key (`WF-123`) via one extra lightweight lookup — only called on
+   * the (uncommon) path where an assignment actually happened, so it doesn't
+   * add a query to the common create/update case with no assignee change.
+   */
+  private async enqueueAssignJob(assigneeId: string, actorId: string, issue: Issue): Promise<void> {
+    if (assigneeId === actorId) {
+      return;
+    }
+
+    const project = await this.prisma.project.findUnique({
+      where: { id: issue.projectId },
+      select: { key: true },
+    });
+    const issueKey = `${project?.key ?? "?"}-${issue.number}`;
+
+    await this.notificationsQueue.add(NOTIFICATION_JOBS.ASSIGNED, {
+      userId: assigneeId,
+      type: "ASSIGNED",
+      actorId,
+      issueKey,
+      projectId: issue.projectId,
+    } satisfies NotificationJobData);
   }
 }

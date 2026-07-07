@@ -1,5 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { InjectQueue } from "@nestjs/bullmq";
+import type { Queue } from "bullmq";
 import {
   REALTIME_EVENTS,
   type Comment,
@@ -10,6 +12,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service.js";
 import { parseIssueKey } from "../common/issue-key.js";
 import type { WorkspaceContext } from "../authz/workspace-context.js";
+import { NOTIFICATIONS_QUEUE, NOTIFICATION_JOBS, type NotificationJobData } from "../notifications/notification-job.js";
 
 type CommentRow = {
   id: string;
@@ -61,6 +64,7 @@ export class CommentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventEmitter2,
+    @InjectQueue(NOTIFICATIONS_QUEUE) private readonly notificationsQueue: Queue<NotificationJobData>,
   ) {}
 
   /**
@@ -102,7 +106,10 @@ export class CommentsService {
    * Creates a comment on the issue named by `key`. Validates every
    * `mentionUserIds` entry is a member of the issue's workspace (400 listing
    * the offending ids), dedupes, and stores them in `mentions`. Emits
-   * `comment.added` AFTER the DB write commits.
+   * `comment.added` AFTER the DB write commits, then enqueues a `mention`
+   * notification job per mentioned user EXCLUDING the author (no
+   * self-notify) — also after the commit, same ordering discipline as the
+   * realtime event.
    */
   async create(
     key: string,
@@ -129,13 +136,19 @@ export class CommentsService {
       projectId: issue.projectId,
       issueKey: key,
     });
+
+    await this.enqueueMentionJobs(mentions, authorId, key, issue.projectId, row.id, row.body);
+
     return dto;
   }
 
   /**
    * Author-only body edit. Re-validates/replaces `mentions` when
    * `mentionUserIds` is provided; leaves the existing mentions untouched
-   * otherwise. Emits `comment.updated` AFTER commit.
+   * otherwise. Emits `comment.updated` AFTER commit, then enqueues a
+   * `mention` job only for NEWLY added mentions (present in the new set but
+   * not the old one) — re-editing a comment must not re-notify someone who
+   * was already mentioned, and self-mention is still excluded.
    */
   async update(
     commentId: string,
@@ -167,6 +180,20 @@ export class CommentsService {
       projectId: existing.projectId,
       issueKey: existing.issueKey,
     });
+
+    if (mentions !== undefined) {
+      const existingMentions = new Set(existing.mentions ?? []);
+      const newlyAdded = mentions.filter((id) => !existingMentions.has(id));
+      await this.enqueueMentionJobs(
+        newlyAdded,
+        requesterId,
+        existing.issueKey,
+        existing.projectId,
+        row.id,
+        row.body,
+      );
+    }
+
     return dto;
   }
 
@@ -212,13 +239,18 @@ export class CommentsService {
   }
 
   /** Looks up a comment's identity plus its issue's key/project/workspace, for author/owner checks and event payloads. */
-  private async findCommentRef(
-    commentId: string,
-  ): Promise<{ authorId: string; projectId: string; workspaceId: string; issueKey: string }> {
+  private async findCommentRef(commentId: string): Promise<{
+    authorId: string;
+    projectId: string;
+    workspaceId: string;
+    issueKey: string;
+    mentions: string[];
+  }> {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
       select: {
         authorId: true,
+        mentions: true,
         issue: {
           select: {
             number: true,
@@ -235,7 +267,33 @@ export class CommentsService {
       projectId: comment.issue.project.id,
       workspaceId: comment.issue.project.workspaceId,
       issueKey: `${comment.issue.project.key}-${comment.issue.number}`,
+      mentions: comment.mentions,
     };
+  }
+
+  /** Enqueues a `mention` notification job per userId in `mentionUserIds`, excluding `excludeUserId` (never notify yourself). */
+  private async enqueueMentionJobs(
+    mentionUserIds: string[],
+    excludeUserId: string,
+    issueKey: string,
+    projectId: string,
+    commentId: string,
+    body: string,
+  ): Promise<void> {
+    const targets = mentionUserIds.filter((id) => id !== excludeUserId);
+    await Promise.all(
+      targets.map((userId) =>
+        this.notificationsQueue.add(NOTIFICATION_JOBS.MENTION, {
+          userId,
+          type: "MENTION",
+          actorId: excludeUserId,
+          issueKey,
+          projectId,
+          commentId,
+          snippet: body.slice(0, 200),
+        } satisfies NotificationJobData),
+      ),
+    );
   }
 
   /** Validates and dedupes mention userIds against the issue's workspace membership. */
