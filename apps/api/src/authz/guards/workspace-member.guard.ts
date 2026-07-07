@@ -84,19 +84,46 @@ export class WorkspaceMemberGuard implements CanActivate {
       }
       case "issue:key": {
         // Project.key is only unique WITHIN a workspace (@@unique([workspaceId, key])),
-        // so multiple workspaces can have a project with the same key. Find the
-        // issue by joining through all same-keyed projects rather than assuming
-        // the first project match is the right one.
+        // so multiple workspaces can have a project with the same key. Two
+        // workspaces can each have a project keyed "WF" with an issue
+        // numbered 1, both resolving to the SAME human key "WF-1". Resolving
+        // globally (first match across ALL workspaces, in creation order)
+        // would let a caller in workspace1 be authorized against workspace2's
+        // issue of the same key, or leak/act on the wrong workspace's data
+        // entirely.
+        //
+        // Restrict resolution to workspaces the CALLER is already a member
+        // of. If a matching issue is found under that constraint, the caller
+        // is provably a member of its workspace (authorized) and it's the
+        // correct issue for that caller — return its workspaceId directly.
+        //
+        // If nothing matches within the caller's own workspaces, preserve the
+        // existing not-found/forbidden semantics: check whether the key
+        // exists in ANY workspace. If it does (just not one the caller
+        // belongs to), 403 as before (no foreign existence leak via a 404).
+        // If it doesn't exist anywhere, 404.
         const rawKey = this.require(request.params?.key, "key param");
         const { projectKey, number } = parseIssueKey(rawKey);
+        const userId = request.user?.id;
         const issue = await this.prisma.issue.findFirst({
-          where: { number, project: { key: projectKey } },
+          where: {
+            number,
+            project: { key: projectKey, workspace: { members: { some: { userId } } } },
+          },
           select: { project: { select: { workspaceId: true } } },
         });
-        if (!issue) {
+        if (issue) {
+          return issue.project.workspaceId;
+        }
+
+        const existsElsewhere = await this.prisma.issue.findFirst({
+          where: { number, project: { key: projectKey } },
+          select: { id: true },
+        });
+        if (!existsElsewhere) {
           throw new NotFoundException("Issue not found");
         }
-        return issue.project.workspaceId;
+        throw new ForbiddenException("You are not a member of this workspace");
       }
       case "label:id": {
         const labelId = this.require(request.params?.id, "id param");

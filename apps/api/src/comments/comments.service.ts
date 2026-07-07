@@ -63,14 +63,25 @@ export class CommentsService {
     private readonly events: EventEmitter2,
   ) {}
 
-  /** Lists comments for the issue named by `key`, oldest-first, cursor-paginated. */
-  async listByIssueKey(key: string): Promise<CommentListResult>;
-  async listByIssueKey(key: string, query: { cursor?: string; limit: number }): Promise<CommentListResult>;
+  /**
+   * Lists comments for the issue named by `key`, oldest-first,
+   * cursor-paginated. `workspaceId` scopes the issue lookup to the workspace
+   * WorkspaceMemberGuard already authorized the caller against for this key
+   * (see the "issue:key" strategy) — Project.key collisions across
+   * workspaces would otherwise let this resolve a foreign issue.
+   */
+  async listByIssueKey(key: string, workspaceId: string): Promise<CommentListResult>;
   async listByIssueKey(
     key: string,
+    workspaceId: string,
+    query: { cursor?: string; limit: number },
+  ): Promise<CommentListResult>;
+  async listByIssueKey(
+    key: string,
+    workspaceId: string,
     query: { cursor?: string; limit: number } = { limit: 50 },
   ): Promise<CommentListResult> {
-    const issue = await this.findIssueByKey(key);
+    const issue = await this.findIssueByKey(key, workspaceId);
 
     const rows = await this.prisma.comment.findMany({
       where: { issueId: issue.id },
@@ -93,8 +104,13 @@ export class CommentsService {
    * the offending ids), dedupes, and stores them in `mentions`. Emits
    * `comment.added` AFTER the DB write commits.
    */
-  async create(key: string, authorId: string, input: CreateComment): Promise<CommentWithAuthor> {
-    const issue = await this.findIssueByKey(key);
+  async create(
+    key: string,
+    workspaceId: string,
+    authorId: string,
+    input: CreateComment,
+  ): Promise<CommentWithAuthor> {
+    const issue = await this.findIssueByKey(key, workspaceId);
     const mentions = await this.resolveMentions(issue.workspaceId, input.mentionUserIds);
 
     const row = await this.prisma.comment.create({
@@ -175,11 +191,18 @@ export class CommentsService {
     });
   }
 
-  /** Looks up the issue by human key. 404s if the project or issue doesn't exist. */
-  private async findIssueByKey(key: string): Promise<IssueRef> {
+  /**
+   * Looks up the issue by human key, scoped to `workspaceId` — the workspace
+   * WorkspaceMemberGuard already authorized the caller against for this key
+   * (see the "issue:key" strategy in workspace-member.guard.ts). Project.key
+   * is only unique WITHIN a workspace, so without this scope a colliding key
+   * in another workspace could resolve here instead. 404s if no issue
+   * matches within that workspace.
+   */
+  private async findIssueByKey(key: string, workspaceId: string): Promise<IssueRef> {
     const { projectKey, number } = parseIssueKey(key);
     const issue = await this.prisma.issue.findFirst({
-      where: { number, project: { key: projectKey } },
+      where: { number, project: { key: projectKey, workspaceId } },
       select: { id: true, projectId: true, project: { select: { workspaceId: true } } },
     });
     if (!issue) {
