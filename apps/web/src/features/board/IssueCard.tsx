@@ -32,10 +32,18 @@ export function IssueCard({
   const navigate = useNavigate();
   const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
 
+  // While this card is the one being dragged, the DragOverlay (see
+  // BoardPage.tsx) renders the "flying" copy that actually follows the
+  // pointer/keyboard — this original node just sits in place as a
+  // placeholder. Fully hiding it (rather than the previous opacity 0.5)
+  // means only the overlay is ever visible mid-drag, so there's nothing
+  // left behind to visually fight the overlay's own transform/fade — a
+  // fix for the reported cross-column drag jank (see the `dropAnimation`
+  // comment in BoardPage.tsx for the full root-cause writeup).
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0 : 1,
   };
 
   function handlePointerDown(e: React.PointerEvent) {
