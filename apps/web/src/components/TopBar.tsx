@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/auth.store.js";
 import { GlobalSearch } from "../features/search/GlobalSearch.js";
+import { NotificationBell } from "../features/notifications/NotificationBell.js";
 
 export function TopBar() {
   const user = useAuthStore((s) => s.user);
@@ -17,12 +18,15 @@ export function TopBar() {
       <span className="topbar__brand">Workflo</span>
       <GlobalSearch />
       {user ? (
-        <div className="topbar__user">
-          <span>{user.name}</span>
-          <button type="button" onClick={handleLogout}>
-            Log out
-          </button>
-        </div>
+        <>
+          <NotificationBell />
+          <div className="topbar__user">
+            <span>{user.name}</span>
+            <button type="button" onClick={handleLogout}>
+              Log out
+            </button>
+          </div>
+        </>
       ) : null}
     </header>
   );
