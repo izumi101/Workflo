@@ -116,7 +116,9 @@ export class IssuesService {
     });
 
     const dto = toIssue(issue);
-    this.events.emit(REALTIME_EVENTS.ISSUE_CREATED, { projectId, issue: dto });
+    // Bare Issue on the wire (it already carries projectId) — see
+    // packages/shared/src/realtime.ts's issueEventPayloadSchema doc comment.
+    this.events.emit(REALTIME_EVENTS.ISSUE_CREATED, dto);
 
     if (dto.assigneeId) {
       await this.enqueueAssignJob(dto.assigneeId, reporterId, dto);
@@ -237,7 +239,9 @@ export class IssuesService {
     });
 
     const dto = toIssue(issue);
-    this.events.emit(REALTIME_EVENTS.ISSUE_UPDATED, { projectId: existing.projectId, issue: dto });
+    // Bare Issue on the wire (it already carries projectId) — see
+    // packages/shared/src/realtime.ts's issueEventPayloadSchema doc comment.
+    this.events.emit(REALTIME_EVENTS.ISSUE_UPDATED, dto);
 
     const assigneeChanged =
       input.assigneeId !== undefined && input.assigneeId !== null && input.assigneeId !== existing.assigneeId;
@@ -290,7 +294,9 @@ export class IssuesService {
     });
 
     const dto = toIssue(issue);
-    this.events.emit(REALTIME_EVENTS.ISSUE_MOVED, { projectId: existing.projectId, issue: dto });
+    // Bare Issue on the wire (it already carries projectId) — see
+    // packages/shared/src/realtime.ts's issueEventPayloadSchema doc comment.
+    this.events.emit(REALTIME_EVENTS.ISSUE_MOVED, dto);
     return dto;
   }
 

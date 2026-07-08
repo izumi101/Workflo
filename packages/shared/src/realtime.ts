@@ -28,10 +28,19 @@ export const REALTIME_CLIENT_EVENTS = {
   LEAVE_PROJECT: "leaveProject",
 } as const;
 
-export const issueEventPayloadSchema = z.object({
-  projectId: z.string().cuid(),
-  issue: issueSchema,
-});
+/**
+ * Wire shape for `issue.created` / `issue.updated` / `issue.moved` — the
+ * BARE Issue object, no envelope. `Issue` already carries `projectId`, so a
+ * `{projectId, issue}` wrapper adds nothing; this is exactly what
+ * `RealtimeListener.broadcast` emits and exactly what the web client's
+ * `useBoardRealtime` / `useIssueDetailRealtime` hooks consume (they filter on
+ * `incoming.projectId` / `incoming.id`). A prior version of this schema
+ * described a `{projectId, issue}` envelope that nothing ever actually put on
+ * the wire — that drift is fixed as of roadmap 0.5 (see CLAUDE.md). Do not
+ * reintroduce a wrapper here without updating the emitter AND both frontend
+ * hooks in lockstep.
+ */
+export const issueEventPayloadSchema = issueSchema;
 export type IssueEventPayload = z.infer<typeof issueEventPayloadSchema>;
 
 export const issueDeletedEventPayloadSchema = z.object({
