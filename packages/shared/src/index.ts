@@ -8,3 +8,5 @@ export * from "./comment.js";
 export * from "./notification.js";
 export * from "./realtime.js";
 export * from "./search.js";
+export * from "./query.js";
+export * from "./query-parse.js";
