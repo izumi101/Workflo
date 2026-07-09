@@ -5,8 +5,8 @@ import {
   REALTIME_EVENTS,
   type CommentDeletedEventPayload,
   type CommentEventPayload,
+  type Issue,
   type IssueDeletedEventPayload,
-  type IssueEventPayload,
 } from "@workflo/shared";
 import { RealtimeGateway } from "./realtime.gateway.js";
 
@@ -24,18 +24,18 @@ export class RealtimeListener {
   constructor(private readonly gateway: RealtimeGateway) {}
 
   @OnEvent(REALTIME_EVENTS.ISSUE_CREATED)
-  onIssueCreated(payload: IssueEventPayload): void {
-    this.broadcast(REALTIME_EVENTS.ISSUE_CREATED, payload);
+  onIssueCreated(issue: Issue): void {
+    this.broadcast(REALTIME_EVENTS.ISSUE_CREATED, issue);
   }
 
   @OnEvent(REALTIME_EVENTS.ISSUE_UPDATED)
-  onIssueUpdated(payload: IssueEventPayload): void {
-    this.broadcast(REALTIME_EVENTS.ISSUE_UPDATED, payload);
+  onIssueUpdated(issue: Issue): void {
+    this.broadcast(REALTIME_EVENTS.ISSUE_UPDATED, issue);
   }
 
   @OnEvent(REALTIME_EVENTS.ISSUE_MOVED)
-  onIssueMoved(payload: IssueEventPayload): void {
-    this.broadcast(REALTIME_EVENTS.ISSUE_MOVED, payload);
+  onIssueMoved(issue: Issue): void {
+    this.broadcast(REALTIME_EVENTS.ISSUE_MOVED, issue);
   }
 
   @OnEvent(REALTIME_EVENTS.ISSUE_DELETED)
@@ -60,9 +60,10 @@ export class RealtimeListener {
     this.gateway.server.to(projectRoom(payload.projectId)).emit(REALTIME_EVENTS.COMMENT_DELETED, payload);
   }
 
-  private broadcast(event: string, payload: IssueEventPayload): void {
-    this.logger.debug(`Broadcasting ${event} to ${projectRoom(payload.projectId)}`);
-    this.gateway.server.to(projectRoom(payload.projectId)).emit(event, payload.issue);
+  /** issue.created/updated/moved emit the exact IssueEventPayload (bare Issue) shape — see packages/shared/src/realtime.ts. */
+  private broadcast(event: string, issue: Issue): void {
+    this.logger.debug(`Broadcasting ${event} to ${projectRoom(issue.projectId)}`);
+    this.gateway.server.to(projectRoom(issue.projectId)).emit(event, issue);
   }
 
   /** comment.added/comment.updated emit the exact CommentEventPayload shape (see packages/shared/src/realtime.ts). */

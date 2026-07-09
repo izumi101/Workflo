@@ -85,7 +85,8 @@ describe("IssuesService", () => {
         select: { counter: true },
       });
       expect(first.number).toBe(1);
-      expect(eventsMock.emit).toHaveBeenCalledWith("issue.created", { projectId: "proj_1", issue: first });
+      // Bare Issue on the wire, no {projectId, issue} wrapper (roadmap 0.5 alignment).
+      expect(eventsMock.emit).toHaveBeenCalledWith("issue.created", first);
 
       // Second create: counter goes 1 -> 2.
       txMock.project.update.mockResolvedValueOnce({ counter: 2 });
@@ -451,7 +452,8 @@ describe("IssuesService", () => {
       expect(updateCall.data.rank > "a1").toBe(true);
       expect(updateCall.data.rank < "a2").toBe(true);
       expect(result.status).toBe("TODO");
-      expect(eventsMock.emit).toHaveBeenCalledWith("issue.moved", { projectId: "proj_1", issue: result });
+      // Bare Issue on the wire, no {projectId, issue} wrapper (roadmap 0.5 alignment).
+      expect(eventsMock.emit).toHaveBeenCalledWith("issue.moved", result);
     });
 
     it("places the issue at the end of the column when both neighbor ids are omitted", async () => {

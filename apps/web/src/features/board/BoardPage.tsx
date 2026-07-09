@@ -5,11 +5,15 @@ import {
   type DragEndEvent,
   type DragStartEvent,
   DragOverlay,
+  type DropAnimation,
+  KeyboardSensor,
   PointerSensor,
   closestCorners,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Issue, IssueStatus, Project } from "@workflo/shared";
 import { rankBetween } from "@workflo/shared";
@@ -22,6 +26,33 @@ import { api } from "../../lib/api.js";
 import { useAuthStore } from "../../store/auth.store.js";
 import { useActiveWorkspaceStore } from "../../store/active-workspace.store.js";
 import { ViewToggle } from "../../components/ViewToggle.js";
+
+// The board's own reorder (via `queryClient.setQueryData` in handleDragEnd,
+// below) is applied outside of dnd-kit's internal state, and — because it
+// goes through a React Query cache write + re-render rather than a
+// synchronous local `arrayMove` — it hasn't committed to the DOM yet at the
+// exact instant `onDragEnd` fires. dnd-kit's *default* drop animation
+// interpolates the overlay's transform toward the dragged item's measured
+// "final" resting position, but since that position isn't live yet on a
+// cross-column move, the measurement is stale — the overlay's motion either
+// snaps to the wrong spot or (as verified by direct DOM instrumentation
+// during this fix) simply vanishes with zero visible animation, followed
+// ~1 frame later by the real card hard-cutting into its new column with no
+// transition at all. That hard cut is the reported "reverse-drag jank"
+// (confirmed present, symmetrically, in both directions — just more
+// noticeable going right-to-left against the reading-order the eye already
+// tracked). Fix: never depend on the (unreliable) final-position
+// measurement — fade the overlay out in place instead, so there's no
+// snap-to-stale-coordinates to see, and the underlying reflow lands
+// underneath a fully-transparent overlay rather than popping into view.
+const dropAnimation: DropAnimation = {
+  duration: 180,
+  easing: "ease",
+  keyframes: ({ transform }) => [
+    { opacity: 1, transform: CSS.Transform.toString(transform.initial) },
+    { opacity: 0, transform: CSS.Transform.toString(transform.initial) },
+  ],
+};
 
 const STATUSES: IssueStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 
@@ -67,6 +98,16 @@ function BoardPageInner({ projectId }: { projectId: string }) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 4 },
+    }),
+    // Keyboard-first pitch (CLAUDE.md §1): a focused card can be picked up
+    // with Space/Enter, moved between/within columns with the arrow keys,
+    // and dropped with Space/Enter; Escape cancels back to the start
+    // position. `sortableKeyboardCoordinates` only knows about the single
+    // SortableContext it's invoked from, so cross-column moves land on the
+    // nearest edge of the adjacent column — good enough to reach every
+    // column via the arrow keys, same as pointer drag-and-drop.
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
 
@@ -192,7 +233,7 @@ function BoardPageInner({ projectId }: { projectId: string }) {
             />
           ))}
         </div>
-        <DragOverlay>
+        <DragOverlay dropAnimation={dropAnimation}>
           {activeIssue ? <IssueCard issue={activeIssue} projectKey={projectKey} /> : null}
         </DragOverlay>
       </DndContext>

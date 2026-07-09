@@ -36,12 +36,13 @@ interface JoinLeaveProjectPayload {
  * connect (no explicit opt-in needed, unlike `project:{id}`) — this is where
  * `NotificationsProcessor` pushes `notification.created`.
  */
-@WebSocketGateway({
-  cors: {
-    origin: (_origin, callback) => callback(null, true),
-    credentials: true,
-  },
-})
+// CORS is intentionally NOT configured here: `@WebSocketGateway({cors})` is a
+// static decorator evaluated at class-definition time, before ConfigService
+// exists, so it can't read WEB_ORIGIN. Socket.IO's real CORS config is set at
+// server-creation time in `RedisIoAdapter.createIOServer` (redis-io.adapter.ts),
+// which overrides whatever (if anything) is set here with the config-driven
+// `{ origin: WEB_ORIGIN, credentials: true }` — matching the HTTP CORS in main.ts.
+@WebSocketGateway()
 export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(RealtimeGateway.name);
 

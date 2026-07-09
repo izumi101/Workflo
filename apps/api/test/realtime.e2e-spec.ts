@@ -3,6 +3,7 @@ import { Test } from "@nestjs/testing";
 import cookieParser from "cookie-parser";
 import request from "supertest";
 import { io, type Socket } from "socket.io-client";
+import { issueEventPayloadSchema } from "@workflo/shared";
 import { AppModule } from "../src/app.module.js";
 import { PrismaService } from "../src/prisma/prisma.service.js";
 import { RedisIoAdapter } from "../src/realtime/redis-io.adapter.js";
@@ -234,6 +235,32 @@ describe("Realtime (e2e)", () => {
     expect((issueOnB as any).id).toBe(res.body.id);
     expect((issueOnB as any).updatedAt).toBeTruthy();
 
+    // Schema-shape assertion (roadmap 0.5 realtime alignment): the wire
+    // payload is the BARE Issue — it must parse as issueEventPayloadSchema
+    // and must NOT have a {projectId, issue} wrapper leaking back in.
+    expect(() => issueEventPayloadSchema.parse(issueOnA)).not.toThrow();
+    expect(issueOnA).not.toHaveProperty("issue");
+    expect(Object.keys(issueOnA as object).sort()).toEqual(
+      [
+        "id",
+        "projectId",
+        "number",
+        "title",
+        "description",
+        "type",
+        "status",
+        "priority",
+        "assigneeId",
+        "reporterId",
+        "parentId",
+        "labelIds",
+        "rank",
+        "dueDate",
+        "createdAt",
+        "updatedAt",
+      ].sort(),
+    );
+
     socketA.close();
     socketB.close();
   });
@@ -271,6 +298,11 @@ describe("Realtime (e2e)", () => {
     expect((issueOnA as any).updatedAt).toBeTruthy();
     expect((issueOnB as any).id).toBe(moveRes.body.id);
     expect((issueOnB as any).status).toBe("IN_PROGRESS");
+
+    // Schema-shape assertion (roadmap 0.5 realtime alignment) — same bare
+    // Issue shape as issue.created, no wrapper.
+    expect(() => issueEventPayloadSchema.parse(issueOnA)).not.toThrow();
+    expect(issueOnA).not.toHaveProperty("issue");
 
     socketA.close();
     socketB.close();
