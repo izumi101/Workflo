@@ -23,6 +23,7 @@ model User {
   reported      Issue[]           @relation("reporter")
   comments      Comment[]
   refreshTokens RefreshToken[]
+  views         View[]
 }
 
 model Workspace {
@@ -32,6 +33,7 @@ model Workspace {
   createdAt DateTime          @default(now())
   members   WorkspaceMember[]
   projects  Project[]
+  views     View[]
 }
 
 enum Role {
@@ -168,3 +170,29 @@ model RefreshToken {
   @@index([userId])
   @@index([family])
 }
+
+// Saved Views (docs/design/nlq-search.md §2.6/§3.5) — a named, stored
+// WorkfloQuery AST. PERSONAL views are creator-only; WORKSPACE views are
+// visible to every workspace member and editable by their creator OR the
+// workspace OWNER (see apps/api/src/views/views.service.ts).
+enum ViewScope {
+  PERSONAL
+  WORKSPACE
+}
+
+model View {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+  creator     User      @relation(fields: [creatorId], references: [id])
+  creatorId   String
+  name        String
+  scope       ViewScope @default(PERSONAL)
+  ast         Json
+  pinned      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId, scope])
+}
+

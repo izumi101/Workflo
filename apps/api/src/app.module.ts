@@ -16,6 +16,7 @@ import { RealtimeModule } from "./realtime/realtime.module.js";
 import { SearchModule } from "./search/search.module.js";
 import { NotificationsModule } from "./notifications/notifications.module.js";
 import { QueryModule } from "./query/query.module.js";
+import { ViewsModule } from "./views/views.module.js";
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { QueryModule } from "./query/query.module.js";
     SearchModule,
     NotificationsModule,
     QueryModule,
+    ViewsModule,
   ],
   providers: [
     {
