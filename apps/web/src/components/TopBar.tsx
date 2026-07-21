@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/auth.store.js";
-import { GlobalSearch } from "../features/search/GlobalSearch.js";
+import { CommandBarLauncher } from "../features/command-bar/CommandBarLauncher.js";
 import { NotificationBell } from "../features/notifications/NotificationBell.js";
 
 export function TopBar() {
@@ -16,7 +16,7 @@ export function TopBar() {
   return (
     <header className="topbar">
       <span className="topbar__brand">Workflo</span>
-      <GlobalSearch />
+      <CommandBarLauncher />
       {user ? (
         <>
           <NotificationBell />

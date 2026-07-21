@@ -69,124 +69,6 @@ body {
   flex-shrink: 0;
 }
 
-/* --- Global search --- */
-
-.global-search {
-  position: relative;
-  flex: 1;
-  max-width: 420px;
-  margin: 0 auto;
-}
-
-.global-search__input {
-  width: 100%;
-}
-
-.global-search__dropdown {
-  position: absolute;
-  z-index: 20;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin-top: 0.35rem;
-  max-height: 360px;
-  overflow-y: auto;
-  list-style: none;
-  padding: 0.3rem;
-  background: #171b1f;
-  border: 1px solid #2a2f36;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.global-search__status {
-  padding: 0.6rem 0.7rem;
-  font-size: 0.82rem;
-  color: #6b7280;
-}
-
-.global-search__result {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  width: 100%;
-  border: none;
-  background: none;
-  border-radius: 6px;
-  padding: 0.45rem 0.6rem;
-  text-align: left;
-  font-size: 0.85rem;
-}
-
-.global-search__result:hover,
-.global-search__result--active {
-  background: #22262b;
-  border: none;
-}
-
-.global-search__result-key {
-  font-size: 0.72rem;
-  color: #6b7280;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.global-search__result-title {
-  flex: 1;
-  color: #e6e6e6;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.global-search__result-status,
-.global-search__result-priority {
-  font-size: 0.68rem;
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  border: 1px solid #333;
-  color: #9aa0a6;
-  white-space: nowrap;
-}
-
-.global-search__result-status--todo {
-  color: #9aa0a6;
-  border-color: #333;
-}
-
-.global-search__result-status--in_progress {
-  color: #facc15;
-  border-color: #ca8a04;
-}
-
-.global-search__result-status--done {
-  color: #4ade80;
-  border-color: #16a34a;
-}
-
-.global-search__result-priority--urgent {
-  color: #f87171;
-  border-color: #b91c1c;
-}
-
-.global-search__result-priority--high {
-  color: #fb923c;
-  border-color: #c2410c;
-}
-
-.global-search__result-priority--medium {
-  color: #facc15;
-  border-color: #ca8a04;
-}
-
-.global-search__result-priority--low {
-  color: #4ade80;
-  border-color: #16a34a;
-}
-
 .app-loading {
   padding: 2rem;
   text-align: center;
@@ -1218,4 +1100,277 @@ a {
 
 .notif-row--read .notif-row__snippet {
   color: #6b7280;
+}
+
+/* --- Command bar (⌘K) --- */
+
+.cmdbar-launcher {
+  flex: 1;
+  max-width: 420px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #0f1215;
+  color: #6b7280;
+  padding: 0.5rem 0.5rem 0.5rem 0.7rem;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.cmdbar-launcher:hover {
+  border-color: #4f7cff;
+  color: #9aa0a6;
+}
+
+.cmdbar-launcher__hint {
+  font-size: 0.7rem;
+  color: #6b7280;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  flex-shrink: 0;
+}
+
+.cmdbar-overlay__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(5, 6, 8, 0.6);
+  display: flex;
+  justify-content: center;
+  padding-top: 12vh;
+}
+
+.cmdbar-overlay__panel {
+  width: 720px;
+  max-width: calc(100vw - 2rem);
+  max-height: 70vh;
+  height: fit-content;
+  background: #171b1f;
+  border: 1px solid #2a2f36;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cmdbar-overlay__input {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid #22262b;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.9rem 1rem;
+  font-size: 1rem;
+}
+
+.cmdbar-overlay__input:focus {
+  outline: none;
+}
+
+.cmdbar-overlay__footer {
+  border-top: 1px solid #22262b;
+  padding: 0.45rem 1rem;
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+/* --- Chip rail (§2.3) --- */
+
+.chip-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid #22262b;
+}
+
+.chip-rail__item {
+  position: relative;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.35rem 0.25rem 0.65rem;
+  background: rgba(79, 124, 255, 0.12);
+  border: 1px solid #33406b;
+  color: #cdd6e3;
+}
+
+.chip:focus-visible,
+.chip:focus {
+  outline: 2px solid #4f7cff;
+  outline-offset: 1px;
+}
+
+.chip--tentative {
+  border-style: dashed;
+  background: rgba(250, 204, 21, 0.08);
+  border-color: #7a6a2a;
+}
+
+.chip--text {
+  background: #1a1d21;
+  border-color: #333;
+  color: #9aa0a6;
+}
+
+.chip__field {
+  color: #9aa0a6;
+  text-transform: lowercase;
+}
+
+.chip__colon {
+  color: #6b7280;
+}
+
+.chip__value {
+  font-weight: 600;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip__marker {
+  color: #facc15;
+  font-weight: 700;
+}
+
+.chip__remove {
+  margin-left: 0.15rem;
+  color: #9aa0a6;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.05rem 0.25rem;
+  border-radius: 999px;
+}
+
+.chip__remove:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.chip-candidates {
+  position: absolute;
+  z-index: 30;
+  top: 100%;
+  left: 0;
+  margin-top: 0.3rem;
+  min-width: 180px;
+  list-style: none;
+  padding: 0.3rem;
+  background: #171b1f;
+  border: 1px solid #2a2f36;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.chip-candidates__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
+.chip-candidates__item:hover {
+  background: #22262b;
+  border: none;
+}
+
+/* --- Command bar results (§2.5) --- */
+
+.cmdbar-results {
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cmdbar-results__status {
+  padding: 0.9rem 0.8rem;
+  font-size: 0.85rem;
+  color: #9aa0a6;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cmdbar-results__actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.cmdbar-results__action {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 0.8rem;
+  color: #7aa2ff;
+}
+
+.cmdbar-results__action:hover {
+  color: #a9c1ff;
+  border: none;
+}
+
+.cmdbar-result {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.cmdbar-result:hover,
+.cmdbar-result--active {
+  background: #22262b;
+  border: none;
+}
+
+.cmdbar-result__key {
+  font-size: 0.72rem;
+  color: #6b7280;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cmdbar-result__title {
+  flex: 1;
+  min-width: 0;
+  color: #e6e6e6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmdbar-result__context {
+  font-size: 0.75rem;
+  color: #6b7280;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 80px;
+  text-align: right;
 }
