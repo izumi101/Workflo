@@ -109,6 +109,12 @@ model Issue {
 
   @@unique([projectId, number])
   @@index([projectId, status, rank])
+  // NLQ query engine perf indexes (docs/design/nlq-search.md §3.2) — support
+  // the compiler's assignee/status, due-date range, and updated-date range
+  // clauses without a full scan.
+  @@index([assigneeId, status])
+  @@index([projectId, dueDate])
+  @@index([projectId, updatedAt])
 }
 
 model Label {
