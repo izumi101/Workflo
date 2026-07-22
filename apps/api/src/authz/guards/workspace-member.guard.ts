@@ -158,6 +158,22 @@ export class WorkspaceMemberGuard implements CanActivate {
         }
         return view.workspaceId;
       }
+      case "issue:body-id": {
+        // Unlike "issue:key" (a human key parsed from a route param), this
+        // reads a raw issue cuid from the request BODY (e.g. POST
+        // /triage/dismiss { issueId, section }) — no key-collision ambiguity
+        // to resolve here since ids are globally unique, so a single direct
+        // lookup suffices.
+        const issueId = this.require(request.body?.issueId, "issueId in body");
+        const issue = await this.prisma.issue.findUnique({
+          where: { id: issueId },
+          select: { project: { select: { workspaceId: true } } },
+        });
+        if (!issue) {
+          throw new NotFoundException("Issue not found");
+        }
+        return issue.project.workspaceId;
+      }
       default:
         throw new NotFoundException("Workspace not found");
     }

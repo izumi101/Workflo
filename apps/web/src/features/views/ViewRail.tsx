@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { View } from "@workflo/shared";
 import { useProjects } from "../../lib/queries.js";
 import { encodeAstForUrl } from "../command-bar/ast-url.js";
+import { useTriage } from "../triage/triage.queries.js";
 import { useDeleteView, useUpdateView, useViews } from "./view.queries.js";
 
 const RAIL_COLLAPSED_KEY = "workflo:rail-collapsed";
@@ -38,8 +39,11 @@ export function ViewRail({ workspaceId }: ViewRailProps) {
 
   const { data: views, isPending: viewsPending } = useViews(workspaceId);
   const { data: projects, isPending: projectsPending } = useProjects(workspaceId);
+  const { data: triage } = useTriage(workspaceId);
   const updateView = useUpdateView(workspaceId);
   const deleteView = useDeleteView(workspaceId);
+
+  const triageBadge = triage?.badge ?? 0;
 
   function toggleCollapsed() {
     setCollapsed((prev) => {
@@ -68,12 +72,16 @@ export function ViewRail({ workspaceId }: ViewRailProps) {
         </button>
       </div>
 
-      {/* Triage is wired in NLQ V1a step 5 (not this step). */}
       <div className="view-rail__section">
         {!collapsed ? <div className="view-rail__section-title">Triage</div> : null}
-        <div className="view-rail__item view-rail__item--disabled" aria-disabled="true">
+        <button
+          type="button"
+          className="view-rail__item view-rail__item--triage"
+          onClick={() => navigate("/triage")}
+        >
           {!collapsed ? "Triage" : "T"}
-        </div>
+          {triageBadge > 0 ? <span className="notif-bell__badge">{triageBadge > 9 ? "9+" : triageBadge}</span> : null}
+        </button>
       </div>
 
       <div className="view-rail__section">

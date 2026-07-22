@@ -1573,3 +1573,168 @@ a {
   padding: 0.45rem 0.6rem;
   font-size: 0.85rem;
 }
+
+.view-rail__item--triage {
+  position: relative;
+  display: block;
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 0.35rem 0.3rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #cdd6e3;
+}
+
+.view-rail__item--triage:hover {
+  background: #1a1d21;
+  border: none;
+  color: #e6e6e6;
+}
+
+/* --- Triage (§2.7) --- */
+
+.triage-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem 3rem;
+  max-width: 960px;
+}
+
+.triage-empty {
+  border: 1px solid #22262b;
+  border-radius: 10px;
+  background: #101317;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+
+.triage-empty__title {
+  font-size: 1.1rem;
+  color: #e6e6e6;
+  margin: 0 0 0.4rem;
+}
+
+.triage-empty__hint {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.triage-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.triage-section__header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.triage-section__title {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #e6e6e6;
+}
+
+.triage-section__description {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+
+.triage-row-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  border: 1px solid #22262b;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.triage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.15rem 0.4rem 0.15rem 0;
+  border-bottom: 1px solid #1a1d21;
+  background: #101317;
+}
+
+.triage-row:last-child {
+  border-bottom: none;
+}
+
+.triage-row--active,
+.triage-row:hover {
+  background: #14171b;
+}
+
+.triage-row__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 0.6rem 0.8rem;
+  color: #e6e6e6;
+  font-size: 0.85rem;
+}
+
+.triage-row__key {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.triage-row__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.triage-row__due,
+.triage-row__assignee {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  color: #9aa0a6;
+  white-space: nowrap;
+}
+
+.triage-row__actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.triage-row__assign {
+  color: #7aa2ff;
+  border-color: #4f7cff;
+}
+
+.triage-row__dismiss {
+  color: #9aa0a6;
+}
+
+.triage-row__dismiss:hover {
+  color: #f87171;
+  border-color: #f87171;
+}

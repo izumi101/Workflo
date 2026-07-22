@@ -24,6 +24,8 @@ model User {
   comments      Comment[]
   refreshTokens RefreshToken[]
   views         View[]
+  triageDismissals TriageDismissal[]
+  triageSeen       TriageSeen[]
 }
 
 model Workspace {
@@ -34,6 +36,7 @@ model Workspace {
   members   WorkspaceMember[]
   projects  Project[]
   views     View[]
+  triageSeen TriageSeen[]
 }
 
 enum Role {
@@ -117,6 +120,7 @@ model Issue {
   @@index([assigneeId, status])
   @@index([projectId, dueDate])
   @@index([projectId, updatedAt])
+  triageDismissals TriageDismissal[]
 }
 
 model Label {
@@ -194,5 +198,46 @@ model View {
   updatedAt   DateTime  @updatedAt
 
   @@index([workspaceId, scope])
+}
+
+// Smart Triage (docs/design/nlq-search.md §2.7/§3.5) — per-user dismissals and
+// last-visit tracking. `priorityAtDismiss`/`wasOverdueAtDismiss` are a
+// deliberate addition beyond §3.5's literal model: §2.7 requires
+// "auto-undismiss on escalation (priority raised or due arrives)", which is
+// impossible to detect without a snapshot of the issue's state at dismiss
+// time (see apps/api/src/triage/triage.service.ts).
+enum TriageSection {
+  OVERDUE
+  GOING_STALE
+  NEEDS_REPLY
+  UNOWNED_URGENT
+}
+
+model TriageDismissal {
+  id                  String        @id @default(cuid())
+  user                User          @relation(fields: [userId], references: [id])
+  userId              String
+  issue               Issue         @relation(fields: [issueId], references: [id])
+  issueId             String
+  section             TriageSection
+  until               DateTime
+  /// Snapshot at dismiss time — powers auto-undismiss on escalation (§2.7).
+  priorityAtDismiss   Priority
+  wasOverdueAtDismiss Boolean       @default(false)
+  createdAt           DateTime      @default(now())
+
+  @@unique([userId, issueId, section])
+  @@index([userId, until])
+}
+
+model TriageSeen {
+  id          String    @id @default(cuid())
+  user        User      @relation(fields: [userId], references: [id])
+  userId      String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+  lastSeenAt  DateTime
+
+  @@unique([userId, workspaceId])
 }
 

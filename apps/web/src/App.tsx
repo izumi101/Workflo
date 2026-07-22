@@ -10,6 +10,7 @@ import { BoardPage } from "./features/board/BoardPage.js";
 import { BacklogPage } from "./features/backlog/BacklogPage.js";
 import { IssueDetailPage } from "./features/issue-detail/IssueDetailPage.js";
 import { ViewResultsPage } from "./features/command-bar/ViewResultsPage.js";
+import { TriagePage } from "./features/triage/TriagePage.js";
 
 export function App() {
   const bootstrap = useAuthStore((s) => s.bootstrap);
@@ -65,6 +66,14 @@ export function App() {
             element={
               <RequireAuth>
                 <ViewResultsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/triage"
+            element={
+              <RequireAuth>
+                <TriagePage />
               </RequireAuth>
             }
           />

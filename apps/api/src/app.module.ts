@@ -17,6 +17,7 @@ import { SearchModule } from "./search/search.module.js";
 import { NotificationsModule } from "./notifications/notifications.module.js";
 import { QueryModule } from "./query/query.module.js";
 import { ViewsModule } from "./views/views.module.js";
+import { TriageModule } from "./triage/triage.module.js";
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { ViewsModule } from "./views/views.module.js";
     NotificationsModule,
     QueryModule,
     ViewsModule,
+    TriageModule,
   ],
   providers: [
     {

@@ -4,6 +4,7 @@ import type { QueryResult, WorkfloQuery } from "@workflo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { issueFtsMatch, issueFtsRank } from "../common/fts.js";
 import { QueryCompilerService, type CompileContext } from "./query-compiler.service.js";
+import { ISSUE_INCLUDE, toQueryResult, type IssueRow } from "./issue-result.mapper.js";
 
 export interface QueryExecuteResult {
   items: QueryResult[];
@@ -15,29 +16,6 @@ export interface QueryExecuteResult {
  * sortable column); see `executeRankOrdered`'s doc comment. This cap bounds
  * both the raw query and the JS-side re-sort/pagination work it feeds. */
 const FTS_CANDIDATE_CAP = 1000;
-
-const ISSUE_INCLUDE = {
-  labels: { select: { id: true } },
-  project: { select: { key: true } },
-} as const;
-
-type IssueRow = Prisma.IssueGetPayload<{ include: typeof ISSUE_INCLUDE }>;
-
-function toQueryResult(row: IssueRow): QueryResult {
-  return {
-    id: row.id,
-    key: `${row.project.key}-${row.number}`,
-    title: row.title,
-    status: row.status,
-    priority: row.priority,
-    projectId: row.projectId,
-    assigneeId: row.assigneeId,
-    dueDate: row.dueDate,
-    updatedAt: row.updatedAt,
-    labelIds: row.labels.map((l) => l.id),
-    type: row.type,
-  };
-}
 
 /**
  * Executes a compiled `WorkfloQuery` — mirrors `IssuesService.listByProject`
