@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# Cancel superseded runs on the same ref (e.g. a branch getting new pushes)
+# so we don't burn runner minutes on stale commits.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: build, typecheck, lint, test, e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # One job (not split per-package) so the Postgres/Redis services and the
+    # pnpm store cache are shared instead of re-provisioned per job — at this
+    # repo size that outweighs any parallelism gain from splitting.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: workflo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d workflo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # apps/api's ConfigModule fail-fast validates these at boot (see
+    # apps/api/src/config/env.validation.ts) — every var it requires must be
+    # set here or the app (and therefore every e2e test) dies on startup.
+    # JWT_* secrets below are throwaway CI-only values, never real secrets.
+    env:
+      NODE_ENV: test
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/workflo?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-access-secret-that-is-long-enough-32chars
+      JWT_REFRESH_SECRET: ci-refresh-secret-that-is-long-enough-32chars
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 7d
+      WEB_ORIGIN: http://localhost:5173
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # No `version` input — reads the pinned version from the root
+      # package.json's `packageManager` field.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # @prisma/client's own postinstall only auto-generates when the schema
+      # sits in one of its default-detected locations; ours lives at
+      # apps/api/prisma/schema.prisma, so postinstall no-ops (verified locally
+      # — it prints "could not find your Prisma schema in the default
+      # locations" and generates nothing). nest build's tsc pass needs the
+      # generated client's types, so this must run before `pnpm build`.
+      - name: Generate Prisma client
+        run: pnpm --filter @workflo/api exec prisma generate
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      # `migrate deploy`, not `migrate dev` — the non-interactive,
+      # production-shaped command; correct for CI/CD.
+      - name: Apply database migrations
+        run: pnpm --filter @workflo/api exec prisma migrate deploy
+
+      - name: Unit tests (shared)
+        run: pnpm --filter @workflo/shared test
+
+      - name: Unit tests (api)
+        run: pnpm --filter @workflo/api test
+
+      - name: e2e tests (api)
+        run: pnpm --filter @workflo/api test:e2e
